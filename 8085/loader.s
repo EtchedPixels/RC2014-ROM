@@ -13,6 +13,11 @@ start:
 	lxi h,Ok
 	call print
 
+	mvi a,32	! Turn the low memory into RAM
+	out 0x78
+	inr a
+	out 0x79
+
 	mvi a,1
 	out 0x40	! Page in RAM not ROM
 
@@ -34,6 +39,9 @@ dread:
 	out 0x12	! We can't assume this will stay as 1
 	mvi a,0x20
 	out 0x17
+
+	mvi a,'.'
+	out 0xC0
 
 	call waitdrq
 	mvi b,0
@@ -79,13 +87,13 @@ waitready:
 	ret
 
 print:
-	in 0
-	ani 2
+	in 0xC5
+	ani 0x20
 	jz print
 	mov a,m
 	ora a
 	rz
-	out 1
+	out 0xC0
 	inx h
 	jmp print
 

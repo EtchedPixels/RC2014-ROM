@@ -132,7 +132,9 @@ sector:
 	jnz badload
 	lda 0xFE01
 	cpi 0x80
-	jz 0xFE02
+	jnz badload
+	call pspace
+	jmp 0xFE02
 badload:
 	lxi h,badboot
 	call print
@@ -172,11 +174,11 @@ pspace:
 pchar:
 	push psw
 pcharw:
-	in 0
-	ani 2
+	in 0xC5
+	ani 0x20
 	jz pcharw
 	pop psw
-	out 1
+	out 0xC0
 	ret
 
 .sect .rom

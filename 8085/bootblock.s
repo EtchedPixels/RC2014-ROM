@@ -1,5 +1,5 @@
 !
-!	A simple bootblock to run at 0x8000
+!	A simple bootblock to run at 0xFE00
 !
 .sect .text
 .sect .rom
