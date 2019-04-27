@@ -2,7 +2,7 @@
 ;	We are loaded at $0200.
 ;	0000-7FFF are RAM 8000-FFFF ROM (except I/O)
 ;
-;	We load an image from 0400-FE00 skipping C000-C0FF
+;	We load an image from 0400-FF00 skipping C000-C0FF
 ;	and then jump to C102 if the marker is right
 ;
 
@@ -23,7 +23,7 @@ start:
 
 	lda #$00
 	sta ptr1
-	lda #$02
+	lda #$04
 	sta ptr1+1
 
 	lda #$01	; 0 is the partition/boot block
@@ -48,7 +48,7 @@ dread:
 	lda ptr1+1	; skip the I/O page
 	cmp #$C0
 	bne not_io
-	inc ptr1+1	; we load C0FF..C200.... etc up to FF00
+	inc ptr1+1	; we load to BFFF..C100.... etc up to FF00
 not_io:
 	ldy #0
 bytes1:
