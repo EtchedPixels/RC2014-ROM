@@ -10,7 +10,7 @@ rom.o: rom.s
 	ca65 rom.s
 
 loader: loader.tmp
-	dd if=loader.tmp of=loader bs=512 skip=1 count=1
+	dd if=loader.tmp of=loader bs=256 skip=2 count=1
 
 loader.tmp: loader.o loader.cfg
 	ld65 -C loader.cfg loader.o -o loader.tmp
