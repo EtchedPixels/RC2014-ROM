@@ -9,3 +9,8 @@ RAM/ROM.
 For the simple 64K memory case see Ben's github for monitors, BASIC etc.
 These images are intended for development work to boot Fuzix and the like on
 a banked system.
+
+# Experimental CP/M ROM for Simple 80
+
+An (emulator tested only at this point) CP/M ROM for Simple 80
+
