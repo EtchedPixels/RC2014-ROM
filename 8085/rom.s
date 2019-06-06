@@ -13,6 +13,23 @@
 
 start:
 	di
+	! Set up the 16550A
+	mvi a,0x80		! DLAB on
+	out 0xC3
+	mvi a,0x01		! 115200 baud
+	out 0xC0
+	xra a
+	out 0xC1
+	mvi a,0x03		! DLAB off, 8N1
+	out 0xC3
+	dcr a			! 2 - RTS on
+	out 0xC4
+	mvi a,0x87		! FIFO on, reset FIFO
+	out 0xC2
+
+	mvi a,'R'		! Display something
+	out 0xC0
+
 	! Turn off the fake M1 generation
 	mvi a,0xC0
 	sim
@@ -29,19 +46,6 @@ start:
 	mvi a,1
 	out 0x7C		! Enable memory mapper
 	lxi sp, 0xC000		! Point SP into RAM
-	! Set up the 16550A
-	mvi a,0x80		! DLAB on
-	out 0xC3
-	mvi a,0x03		! 38400 baud
-	out 0xC0
-	xra a
-	out 0xC1
-	mvi a,0x03		! DLAB off, 8N1
-	out 0xC3
-	dcr a			! 2 - RTS on
-	out 0xC4
-	mvi a,0x87		! FIFO on, reset FIFO
-	out 0xC2
 	!
 	!	As early as possible display something
 	!
@@ -105,6 +109,18 @@ scanon:
 	mvi a,0xEF	! Set features - 8bit mode
 	out 0x17 	! command
 	call waitready
+	mvi a,'8'
+	call pchar
+	mvi a,0x55
+	out 0x13
+	in 0x13
+	cpi 0x55
+	jnz no_media
+	mvi a,0xAA
+	out 0x13
+	in 0x13
+	cpi 0xAA
+	jnz no_media
 	xra a
 	out 0x13	! LBA 0-2
 	out 0x14
@@ -114,8 +130,11 @@ scanon:
 	out 0x12	! Count
 	mvi a,0x20	! Read Sector
 	out 0x17 	! command
+	nop
 	lxi h,0xFE00	! buffer target
 	call waitdrq
+	mvi a,'<'
+	call pchar
 	mvi b,0
 sector:
 	in 0x10 	! Data
@@ -126,6 +145,8 @@ sector:
 	inx h
 	dcr b
 	jnz sector
+	mvi a,'>'
+	call pchar
 	call waitready
 	lda 0xFE00
 	cpi 0x85
@@ -139,6 +160,11 @@ badload:
 	lxi h,badboot
 	call print
 	hlt
+no_media:
+	call phex
+	lxi h,nomedia
+	call print
+	hlt
 
 badpage:
 	mvi a,35	! Correct top page
@@ -149,6 +175,9 @@ badpage:
 
 waitdrq:
 	in 0x17		! Status
+	push psw
+	call phex
+	pop psw
 	ani 0x08	! DRQ
 	jz waitdrq
 	ret
@@ -180,14 +209,32 @@ pcharw:
 	pop psw
 	out 0xC0
 	ret
+phex:
+	push psw
+	rar
+	rar
+	rar
+	rar
+	call phexdigit
+	pop psw
+phexdigit:
+	ani 0x0f
+	cpi 10
+	jc noadd
+	adi 7
+noadd:	adi 48
+	jmp pchar
 
 .sect .rom
 signon:
-	.ascii "RC2014/85 ROM BIOS 0.1"
+	.ascii "C2014/85 ROM BIOS 0.1"
 newline:
 	.data1 13,10,0
 loading:
 	.asciz "Loading ..."
 badboot:
 	.ascii "Not a valid boot block"
+	.data1 13,10,0
+nomedia:
+	.ascii "CF card not present"
 	.data1 13,10,0
