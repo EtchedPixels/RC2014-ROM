@@ -245,7 +245,7 @@ strout:
 	jr strout
 
 signon:
-	db 'Simple 80 CP/M ROM 0.16',13,10,0
+	db 'Simple 80 CP/M ROM 0.17',13,10,0
 timeout:
 	db 'CF card not detected',13,10,0
 cfboot:
@@ -4560,7 +4560,7 @@ DMA2sec:
 	out (CMD),a
 	ld de,4000h
 	call readdrq	; check drq bit set before writing
-	jr nz, badwrite
+	jr z, badwrite
 
 	ld hl,CFsecdat0	; store CF data to buffer
 	ld bc,DATA	; reg C points to CF data reg
@@ -4574,7 +4574,7 @@ badwrite:
 	pop de
 	pop hl
 	ld a,0		; return good read status, preserve flags
-	ret z
+	ret nz
 	inc a
 	ret
 
