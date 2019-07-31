@@ -1,55 +1,11 @@
-This is a prototype ROM CP/M for Simple 80
+Micro80 Emulator
 
-At boot time the CF is checked for a signature and autobooted if this is
-present (for running things like Fuzix). If not then CP/M is entered.
+Simple CP/M 2.2 implementation (could be cleaned up for a bigger TPA)
 
-The CF is mapped as drives A to D in the same fashion that most RC2014 and
-Grant Searle derived systems do. E and F are mapped onto RAM and ROM drives
-using the rest of the EPROM image and the other bank of RAM. The second
-RAM bank is preserved as far as possible so *usually* it will survive a crash
-and reset.
+Banked CP/M 3 and LDRBIOS, currently loaded from CP/M 2.2
 
-There is purposely no monitor or BASIC in the ROM as such, instead as CP/M
-is booted from ROM your ROM image can provide both a BASIC and debugger
-(MBASIC and DDT for example or R T Russell's rather nice BBC Basic for
-CP/M which is not only nicer than the usual MBASIC but also 8K smaller
-leaving you more ROM drive room).
-
-http://www.bbcbasic.co.uk/bbcbasic/z80basic.html
-
-If you don't use MBASIC you'll need to tweak the message in the ROM about
-how to enter BASIC
-
-The cpmtools definition for the ROM disc image is
-
-diskdef s80rom
-  seclen 128
-  tracks 26
-  sectrk 16
-  blocksize 1024
-  maxdir 32
-  skew 0
-  boottrk 0
-  os 2.2
-end
-
-diskdef s80ram
-  seclen 128
-  tracks 31
-  sectrk 16
-  blocksize 1024
-  maxdir 32
-  skew 0
-  boottrk 0
-  os 2.2
-end
+The CP/M 3 is designed to be built from within CP/M 2.2 using ZMAC for CP/M and
+the supplied CP/M tools (LINK, GENCPM).
 
 
-and you can use that to assemble a cpm.raw which make will assemble into your
-disk image.
 
-
-Things to do
-
-Full test on real hardware and the new board version
-Move CP/M and the BIOS up as far as possible to get a bigger TPA
