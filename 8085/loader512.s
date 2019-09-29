@@ -33,7 +33,7 @@ start:
 	xra a
 dread:
 	inr a
-	cpi 126
+	cpi 125
 	jz load_done
 	push h
 	mov e,a
@@ -66,16 +66,20 @@ dread:
 	jmp dread
 
 load_done:
+	mvi a,3
+	out 0xFF	! Go to all RAM
 	lda 0x0100
 	cpi 0x85
 	jnz bad_load
 	lda 0x0101
 	cpi 0x80
 	jnz bad_load
+	mvi a,1
+	out 0xFF
 	lxi h,running
 	call print
 	mvi a,3
-	out 0xFF	! Go to all RAM
+	out 0xFF
 	jmp 0x0102	! Run the loaded OS image
 
 bad_load:
@@ -114,9 +118,11 @@ Ok:
 	.data1 13,10,0
 
 badimg:
+	.data1 13,10
 	.ascii 'Image not bootable.'
 	.data1 13,10,0
 
 running:
+	.data1 13,10
 	.ascii 'Boot complete.'
 	.data1 13,10,0
