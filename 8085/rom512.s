@@ -1,3 +1,15 @@
+#define ACIA_RESET	0x03
+#define ACIA_RTS_LOW	0x96
+
+#define	stack_base	0xFDE0
+#define scratch		0xFDE0
+#define uart_type	0xFDF0
+#define ide_type	0xFDF1
+#define ram_bad		0xFDFF
+
+#define in_helper	0xFDE0
+#define out_helper	0xFDE3
+
 .sect .text
 .sect .rom
 .sect .data
@@ -17,6 +29,49 @@ start:
 	!	have 64K of ROM mapped
 	!
 	di
+	jmp go
+	nop
+	nop
+	nop
+	nop
+!
+!	Vectors for loaders etc
+!
+r8:	jmp pchar
+	jmp print
+	jmp ide_readb
+	jmp ide_read_data
+	jmp ide_writeb
+	jmp ide_waitdrq
+	jmp ide_waitready
+
+!
+!	Our first goal is to figure out the UART and print something,
+!	anything so the user knows the board is at least running. We do
+!	this without touching the MMU or requiring RAM
+!
+go:
+	!
+	!	Probe for a 68B50
+	!
+	in 0xA0
+	ani 2
+	jz not_acia		! TX ready ought to be high...
+	mvi a,ACIA_RESET
+	out 0xA0		! Force reset on
+	in 0xA0
+	ani 2			! Reset forces TX ready off
+	jnz not_acia
+	mvi a,2			! Put the ACIA back in normal state
+	out 0xA0
+	mvi a,ACIA_RTS_LOW	! Set up the lines
+	sta 0xA0
+	mvi a,'R'		! Print the initial 'R'
+	out 0xA1
+	mvi b,1
+	jmp init_ram
+
+not_acia:
 	! Set up the 16550A
 	mvi a,0x80		! DLAB on
 	out 0xC3
@@ -33,15 +88,29 @@ start:
 
 	mvi a,'R'		! Display something
 	out 0xC0
+	mvi b,2
 
+init_ram:
 	!
 	!	Put some RAM in the common space
 	!
 	mvi a,0x01		! ROM 0 low RAM 0 high
 	out 0xFF
-	lxi sp, 0xFE00		! Point SP into RAM (just under boot block)
+	lxi sp, stack_base	! Point SP into RAM (just under the space
+				! we keep for info)
+
 	!
-	!	As early as possible display something
+	!	Now we have RAM remember the detected UART
+	!
+	mov a,b
+	sta uart_type
+
+	xra a
+	sta ram_bad
+
+	!
+	!	Display the sign on message and begin the RAM test
+	!	If you get just RC then you know there is a RAM problem
 	!
 	lxi h,signon
 	call print
@@ -76,6 +145,7 @@ pnext:
 notpresent:
 	mvi a,0x01
 	out 0xFF
+	sta ram_bad
 	mvi a,'-'
 	jmp pnext
 
@@ -94,12 +164,39 @@ scandone:
 	lxi h,newline
 	call print
 
+	lda ram_bad
+	ora a
+	jz ram_good
+	lxi h,ramwarning
+	call print
+
+
+ram_good:
+
+	!
+	!	Hardware reporting
+	!
+
+	lda uart_type
+	dcr a
+	jnz report_16x50
+	lxi h,is_acia
+	jmp report_uart
+report_16x50:
+	lxi h,is_16x50
+report_uart:
+	call print
+
+	call ide_init
+
+	lxi h,0xE0		! Master, LBA
+	mvi a,0xE		! Set head/device
+	call ide_writeb
+
 	!
 	!	Select the disk
 	!
-	mvi a,0xe0
-	out 0x16 	! head & dev,a
-	call waitready
+	call ide_waitready
 
 	!
 	!	Let the user know
@@ -107,58 +204,52 @@ scandone:
 	lxi h,loading
 	call print
 
-	mvi a,1
-	out 0x11 	! feature
-	mvi a,0xEF	! Set features - 8bit mode
-	out 0x17 	! command
-	call waitready
 	mvi a,'1'
 	call pchar
-	mvi a,0x55
-	out 0x13
-	in 0x13
+	lxi h,0x55
+	mvi a,0x0B		! Reg 3 should be writable/readable
+	call ide_writeb
+	mvi a,0x0B
+	call ide_readb
 	cpi 0x55
 	jnz no_media
 	mvi a,'2'
 	call pchar
-	mvi a,0xAA
-	out 0x13
-	in 0x13
+	lxi h,0xAA
+	mvi a,0x0B
+	call ide_writeb
+	mvi a,0x0B
+	call ide_readb
 	cpi 0xAA
 	jnz no_media
 	mvi a,'3'
 	call pchar
-	xra a
-	out 0x13	! LBA 0-2
-	out 0x14
-	out 0x15
+	lxi h,0
+	mvi a,0x0B		! LBA 0-2 to 0
+	call ide_writeb
+	mvi a,0x0C
+	call ide_writeb
+	mvi a,0x0D
+	call ide_writeb
 	! We set LBA3 to E0 already
-	inr a
-	out 0x12	! Count
+	mvi l,1
+	mvi a,0x0A		! Count
+	call ide_writeb
 	mvi a,'4'
 	call pchar
-	mvi a,0x20	! Read Sector
-	out 0x17 	! command
-	nop
-	lxi h,0xFE00	! buffer target
+	mvi l,0x20
+	mvi a,0x0F		! Command
+	call ide_writeb
+	lxi h,0xFE00		! buffer target
 	mvi a,'W'
 	call pchar
-	call waitdrq
+	call ide_waitdrq
 	mvi a,'w'
 	call pchar
-	mvi b,0
-sector:
-	in 0x10 	! Data
-	mov m,a
-	inx h
-	in 0x10
-	mov m,a
-	inx h
-	mvi a,'.'
-	call pchar
-	dcr b
-	jnz sector
-	call waitready
+
+	call ide_read_data	! Transfer a sector into FE00-FFFF
+
+	call ide_waitready
 	lda 0xFE00
 	cpi 0x85
 	jnz badcode
@@ -181,46 +272,63 @@ no_media:
 	call print
 	hlt
 
-waitdrq:
-	in 0x17		! Status
+ide_waitdrq:
+	mvi a,0x0F		! Status
+	call ide_readb
 	mov b,a
-	ani 0x08	! DRQ
+	ani 0x09		! DRQ or ERR
 	rnz
 	mvi a,'D'
 	call pchar
 	mov a,b
 	call phex
-	jmp waitdrq
+	jmp ide_waitdrq
 
-waitready:
-	in 0x17
+ide_waitready:
+	mvi a,0x0F
+	call ide_readb
 	mov b,a
-	ani 0x40
+	ani 0x41
 	rnz
 	mvi a,'R'
 	call pchar
 	mov a,b
 	call phex
-	jmp waitready
+	jmp ide_waitready
 
+!
+!	Print the string in HL. Uses A
+!
 print:
-	in 0xC5
-	ani 0x20
-	jz print
 	mov a,m
 	ora a
 	rz
-	out 0xC0
+	call pchar
 	inx h
 	jmp print
+
 pspace:
 	mvi a,32
+!
+!	Print the character in A
+!
 pchar:
 	push psw
-pcharw:
+	lda uart_type
+	dcr a
+	jnz pcharw_16x50
+pcharw_acia:
+	in 0xA0
+	ani 2
+	jz pcharw_acia
+	pop psw
+	out 0xA1
+	ret
+
+pcharw_16x50:
 	in 0xC5
 	ani 0x20
-	jz pcharw
+	jz pcharw_16x50
 	pop psw
 	out 0xC0
 	ret
@@ -240,21 +348,207 @@ phexdigit:
 noadd:	adi 48
 	jmp pchar
 
+!
+!	Library for PPIDE on 8085
+!
+#define PPIDE_PPI_BUS_READ	0x92
+#define PPIDE_PPI_BUS_WRITE	0x80
+
+#define PPIDE_PPI_WR_LINE	0x20
+#define PPIDE_PPI_RD_LINE	0x40
+#define PPIDE_PPI_RESET_LINE	0x80
+
+#define IDE_REG_STATUS		0x0F
+#define IDE_REG_DATA		0x08
+
+!
+!	Initialize IDE
+!
+ide_init:
+	!
+	!	Set up helpers
+	!
+	!	We write
+	!		IN xx		DB 00
+	!		RET		C9
+	!		OUT xx		D3 00
+	!		RET		C9
+	!
+	!	into some scratch RAM
+	!
+	lxi h,0x00DB
+	shld in_helper
+	lxi h,0xD3C9
+	shld in_helper+2
+	lxi h,0xC900
+	shld in_helper+4
+	!
+	!	Probe for a PPIDE
+	!
+	mvi a,0x9B		! All inputs
+	out 0x23
+	in 0x23
+	cpi 0x9B		! Check if we can read it back
+	jnz ide_cf_init
+	mvi a,PPIDE_PPI_BUS_READ
+	out 0x23
+	in 0x23
+	cpi PPIDE_PPI_BUS_READ
+	jnz ide_cf_init
+	mvi a,PPIDE_PPI_RESET_LINE
+	out 0x22
+
+	lxi b,0xFFFF
+wait1:
+	dcx b
+	jnk wait1
+
+	mvi a,IDE_REG_STATUS
+	out 0x22
+
+	mvi a,1
+	sta ide_type
+	ret
+
+ide_cf_init:
+	mvi a,0xE0
+	out 0x16		! Head and device
+	call ide_waitready
+	mvi a,1
+	out 0x11
+	mvi a,0xEF		! 8bit mode
+	out 0x17
+	call ide_waitready
+
+	! Could do a 55/AA detect test here if we need to allow for a
+	! further type
+	mvi a,2
+	sta ide_type
+	ret
+!
+!	Read register A and return it A
+!	Uses BC
+!
+ide_readb:
+	mov b,a
+	lda ide_type
+	dcr a
+	jnz ide_readb_cf
+	mov a,b
+	out 0x22
+	ori PPIDE_PPI_RD_LINE
+	out 0x22
+	in 0x20
+	mov c,a
+	mov a,b
+	out 0x22
+	mov a,c
+	ret
+!
+!	This is really ugly because we don't have out (c) and in (c)
+!	on 8080/8085
+!
+ide_readb_cf:
+	mov a,b
+	adi 8			! Turn the PPIDE bits into a port
+	sta in_helper+1
+	jmp in_helper
+
+!
+!	Write register A with HL
+!	uses BC
+!
+ide_writeb:
+	mov b,a
+	lda ide_type
+	dcr a
+	jnz ide_writeb_cf
+	mvi a,PPIDE_PPI_BUS_WRITE
+	out 0x23
+	mov a,b
+	out 0x22
+	mov a,l
+	out 0x20
+	mov a,h
+	out 0x21
+	mov a,b
+	ori PPIDE_PPI_WR_LINE
+	out 0x22
+	mov a,b
+	out 0x22
+	mvi a,PPIDE_PPI_BUS_READ
+	out 0x23
+	ret
+ide_writeb_cf:
+	mov a,b
+	adi 8			! Turn the PPIDE bits into a port
+	sta out_helper+1
+	mov a,l			! 8bits to write
+	jmp out_helper
+
+!
+!	Read the sector data into HL
+!
+ide_read_data:
+	lda ide_type
+	dcr a
+	jnz ide_read_data_cf
+	mvi a,IDE_REG_DATA
+	out 0x22
+	mov d,a
+	ori PPIDE_PPI_RD_LINE
+	mov e,a
+	mvi b,0
+goread:
+	mov a,e
+	out 0x22
+	in 0x20
+	mov m,a
+	inx h
+	in 0x21
+	mov m,a
+	inx h
+	mov a,d
+	out 0x22
+	dcr b
+	jnz goread
+	ret
+ide_read_data_cf:
+	mvi b,0
+cfread:
+	in 0x10			! Read data
+	mov m,a
+	inx h
+	in 0x10
+	mov m,a
+	inx h
+	dcr b
+	jnz cfread
+	ret
+
 .sect .rom
 signon:
-	.ascii "C2014/85 ROM BIOS 0.1.1 for 8085 MMU"
+	.ascii "C2014/85 ROM BIOS 0.1.2 for 8085/MMU"
 	.data1 13,10
-	.ascii "Memory banks present "
-newline:
-	.data1 13,10,0
+	.asciz "Memory banks present: "
 loading:
 	.asciz "Loading ..."
 loaderr:
 	.ascii "CF error"
+newline:
 	.data1 13,10,0
 badboot:
 	.ascii "Not a valid boot block"
 	.data1 13,10,0
 nomedia:
 	.ascii "CF card not present"
+	.data1 13,10,0
+is_acia:
+	.ascii "Console: ACIA at 0xA0"
+	.data1 13,10,0
+is_16x50:
+	.ascii "Console: 16x50 UART at 0xC0"
+	.data1 13,10,0
+ramwarning:
+	.ascii "WARNING: RAM test failed"
 	.data1 13,10,0

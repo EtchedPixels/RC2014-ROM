@@ -1,3 +1,11 @@
+#define pchar		0x08
+#define print		0x0B
+#define ide_readb	0x0E
+#define ide_read_data	0x11
+#define ide_writeb	0x14
+#define ide_waitdrq	0x17
+#define ide_waitready	0x1A
+
 !
 !	A loader bootblock to run at 0xFE00
 !
@@ -15,44 +23,46 @@ start:
 	lxi h,Ok
 	call print
 
-	mvi a,3
-	out 0xFF
-
 	lxi h,0x0100
-	lxi sp,0xfe00
+	lxi sp,0xFB00
 
 	!	HL	= load address
-	!	B	= counts bytes for sector loads
-	!	C	= current sector
+	!	D	= counts bytes for sector loads
+	!	E	= current sector
 	!
 	xra a
 dread:
 	inr a
 	cpi 126
 	jz load_done
-	out 0x13
-	mov c,a
-	mvi a,1
-	out 0x12	! We can't assume this will stay as 1
-	mvi a,0x20
-	out 0x17
+	push h
+	mov e,a
+	mov l,a
+	mvi a,0x0B
+	call ide_writeb
+	mvi l,1
+	mvi a,0x0A
+	call ide_writeb
+	mvi a,0x0F
+	mvi l,0x20
+	call ide_writeb
 
 	mvi a,'.'
-	out 0xC0
+	call pchar
 
-	call waitdrq
-	mvi b,0
-sector:
-	in 0x10 	! Data
-	mov m,a
-	inx h
-	in 0x10
-	mov m,a
-	inx h
-	dcr b
-	jnz sector
-	call waitready
-	mov a,c
+	call ide_waitdrq
+	lxi h,0xFB00	! bounce buffer
+	push d
+	call ide_read_data
+	call ide_waitready
+	pop d
+	pop h
+	mvi a,3
+	out 0xFF
+	call bounce
+	mvi a,1
+	out 0xFF
+	mov a,e
 	jmp dread
 
 load_done:
@@ -64,35 +74,38 @@ load_done:
 	jnz bad_load
 	lxi h,running
 	call print
-	jmp 0x0102
+	mvi a,3
+	out 0xFF	! Go to all RAM
+	jmp 0x0102	! Run the loaded OS image
 
 bad_load:
 	lxi h,badimg
 	call print
 	hlt
-	
-waitdrq:
-	in 0x17		! Status
-	ani 0x08	! DRQ
-	jz waitdrq
-	ret
 
-waitready:
-	in 0x17
-	ani 0x40
-	jz waitready
-	ret
-
-print:
-	in 0xC5
-	ani 0x20
-	jz print
-	mov a,m
-	ora a
-	rz
-	out 0xC0
+!
+!	Copy 512 bytes from 0xFB00 to H leaving H adjusted to the next
+!	block. Preserves BCDE
+!
+bounce:
+	push d
+	push b
+	lxi d,0xFB00
+	mvi b,0
+bounceloop:
+	ldax d
+	mov m,a
+	inx d
 	inx h
-	jmp print
+	ldax d
+	mov m,a
+	inx d
+	inx h
+	dcr b
+	jnz bounceloop
+	pop b
+	pop d
+	ret
 
 .sect .data
 
