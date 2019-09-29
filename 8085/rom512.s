@@ -9,6 +9,7 @@
 
 #define in_helper	0xFDE0
 #define out_helper	0xFDE3
+#define nbank		0xFDE6
 
 .sect .text
 .sect .rom
@@ -121,6 +122,9 @@ init_ram:
 	lxi h,0xFE00
 	lxi d,banktab
 	lxi b,0x55AA
+	mvi a,'0'
+	sta nbank
+
 ramnext:
 	ldax d
 	ora a
@@ -137,10 +141,13 @@ ramnext:
 	jnz notpresent
 	mvi a,0x01
 	out 0xFF		! Put our stack back
-	mvi a,'X'
+	lda nbank
 pnext:
 	call pchar
 	inx d
+	lda nbank
+	inr a
+	sta nbank
 	jmp ramnext
 notpresent:
 	mvi a,0x01
@@ -179,15 +186,22 @@ ram_good:
 
 	lda uart_type
 	dcr a
-	jnz report_16x50
 	lxi h,is_acia
-	jmp report_uart
-report_16x50:
+	jz report_uart
 	lxi h,is_16x50
 report_uart:
 	call print
 
 	call ide_init
+
+	lda ide_type
+	dcr a
+	lxi h,is_ppide
+	jz report_ide
+	lxi h,is_cf
+
+report_ide:
+	call print
 
 	lxi h,0xE0		! Master, LBA
 	mvi a,0xE		! Set head/device
@@ -548,6 +562,12 @@ is_acia:
 	.data1 13,10,0
 is_16x50:
 	.ascii "Console: 16x50 UART at 0xC0"
+	.data1 13,10,0
+is_cf:
+	.ascii "IDE: CF adapter at 0x10"
+	.data1 13,10,0
+is_ppide:
+	.ascii "IDE: PPIDE adapter at 0x20"
 	.data1 13,10,0
 ramwarning:
 	.ascii "WARNING: RAM test failed"
