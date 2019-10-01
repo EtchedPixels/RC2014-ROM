@@ -1,4 +1,4 @@
-all: ack2rom rc2014-8085.rom 512-8085.rom bootblock loader loader512
+all: ack2rom rc2014-8085.rom 512-8085.rom bootblock loader loader512 loader512cpm
 
 ack2rom: ack2rom.c
 
@@ -26,6 +26,11 @@ loader512: ack2rom loader512.s
 	ack -mcpm -c loader512.s
 	/opt/ackcc/lib/ack/em_led -b0:0xFE00 loader512.o -o loader512.bin
 	./ack2rom <loader512.bin >loader512
+
+loader512cpm: ack2rom loader512cpm.s
+	ack -mcpm -c loader512cpm.s
+	/opt/ackcc/lib/ack/em_led -b0:0xFE00 loader512cpm.o -o loader512cpm.bin
+	./ack2rom <loader512cpm.bin >loader512cpm
 
 clean:
 	rm -f ack2rom *.o *.bin rc2014-8085.rom loader bootblock *~
