@@ -5,6 +5,9 @@
 #define ide_writeb	0x14
 #define ide_waitdrq	0x17
 #define ide_waitready	0x1A
+#define pready	        0x1D
+#define iready	        0x20
+#define ichar           0x23
 
 !
 !	A loader bootblock to run at 0xFE00

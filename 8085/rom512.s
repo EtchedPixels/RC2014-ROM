@@ -45,6 +45,9 @@ r8:	jmp pchar
 	jmp ide_writeb
 	jmp ide_waitdrq
 	jmp ide_waitready
+	jmp pready
+	jmp iready
+	jmp ichar
 
 !
 !	Our first goal is to figure out the UART and print something,
@@ -361,6 +364,42 @@ phexdigit:
 	adi 7
 noadd:	adi 48
 	jmp pchar
+
+pready:
+	lda uart_type
+	dcr a
+	jnz pready_16x50
+	in 0xA0
+	ani 2
+	ret
+pready_16x50:
+	in 0xC5
+	ani 0x20
+	ret
+
+iready:
+	lda uart_type
+	dcr a
+	jnz iready_16x50
+	in 0xA0
+	ani 0x80
+	ret
+iready_16x50:
+	in 0xC5
+	ani 0x01
+	ret
+
+ichar:
+	call iready
+	jz ichar
+	lda uart_type
+	dcr a
+	jnz ichar_16x50
+	in 0xA1
+	ret
+ichar_16x50:
+	in 0xC0
+	ret
 
 !
 !	Library for PPIDE on 8085
