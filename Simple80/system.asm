@@ -117,9 +117,11 @@ rdinit:
 	call strout
 	call ramdisc_init
 nordinit:
+	ld hl,bootcf
+	call strout
 	ld de,0		; Give the CF time to start
 	call ide_ready	;;8 wait until busy flag is cleared
-	jr c, timeout_cf
+	jr z, timeout_cf
 	ld a,0e0h		;;8 set up LBA mode
 	out (LBA_3),a	;;8
 	ld a,1		;;8 set feature to 8-bit interface
@@ -127,7 +129,7 @@ nordinit:
 	ld a,0efh		;;8 set feature command
 	out (CMD),a	;;8
 	call ide_ready	;;8 wait until busy flag is cleared
-	jr c, timeout_cf
+	jr z, timeout_cf
 	ld a,1
 	ld (cfinit),a	; CF init completed (so CP/M doesn't keep redoing it)
 
@@ -246,6 +248,8 @@ strout:
 
 signon:
 	db 'Simple 80 CP/M ROM 0.17',13,10,0
+bootcf:
+	db 'Initializing CF adapter',13,10,0
 timeout:
 	db 'CF card not detected',13,10,0
 cfboot:
@@ -255,8 +259,7 @@ idefail:
 formatram:
 	db 'Formatting RAMdisc',13,10,0
 welcome:
-	db 'CP/M 2.2 (C) 1979 Digital Research',13,10
-	db 'Welcome to CP/M 2.2. Type MBASIC to start BASIC',13,10,0
+	db 'CP/M 2.2 (C) 1979 Digital Research',13,10,0
 
 	org 0dc00h
 ;

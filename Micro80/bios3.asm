@@ -469,7 +469,7 @@ const_done:
 	    ret z
 const_ready:
             ; we're ready
-	    dec a
+	    ld a,255
             ret
             
 conin:      ; read character from console into A; wait if no character ready
@@ -478,8 +478,8 @@ conin:      ; read character from console into A; wait if no character ready
             ;	Implement all our input reading methods with I/O
             ;   redirection.
             ;
-            ld e, a
-inread:     bit 7, e
+inread:     ld e, a
+            bit 7, e
             jr z, conin_u1
 conin_try:  in a, (SIOACmd)
             bit 0, a
@@ -689,6 +689,8 @@ write_ide:  ; write to our IDE disk
 	    call selmem
             otir
 	    otir
+	    xor a
+	    call selmem
 	    call ide_wait_done
             jr nz, rw_done
 rw_fail:
@@ -817,9 +819,9 @@ diskptr:    dw 0        ; current disk dpb entry
 	dseg
 
 bootmsg:    db 10, 13
-	    db 'Micro80 CP/M 3.x Banked BIOS 0.02'
+	    db 'Micro80 CP/M 3.x Banked BIOS 0.03'
 	    db 10,13
-	    db 'Alan Cox 2019-07-30'
+	    db 'Alan Cox 2019-10-01'
 	    db 10,13,10,13,0
 
 clockinit:
@@ -832,14 +834,19 @@ clockinit:
 ide_map:
 ;
 ;   Block addressed
-;   00000000 000000DD TTTTTTTT SSSSSSSS
+;   00000000 00000000 DDTTTTTT SSSSSSSS
 ;
 ;
-            ld a, (curtrack)	  ; track forms the upper 8bits
-            ld hl, (cursector)    ; sector forms the low 8bits
+	    ld a, (curdisk)
+	    rra
+	    rra
 	    ld h,a
-	    ld de,(curdisk)	  ; e is the drive
-	    ld d,0
+            ld a, (curtrack)	  ; track forms the upper 8bits
+            or h
+	    ld h,a
+            ld a, (cursector)     ; sector forms the low 8bits
+	    ld l,a
+	    ld de,0		  ; will need updating for > 4 drives
             ret			  ; done
 
 
