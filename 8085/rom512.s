@@ -221,6 +221,8 @@ report_ide:
 	lxi h,loading
 	call print
 
+	call idedump
+
 	mvi a,'1'
 	call pchar
 	lxi h,0x55
@@ -233,12 +235,16 @@ report_ide:
 	mvi a,'2'
 	call pchar
 	lxi h,0xAA
-	mvi a,0x0B
+	mvi a,0x0C		! Reg 4 likewise, and not affect Reg 3
 	call ide_writeb
-	mvi a,0x0B
+	mvi a,0x0C
 	call ide_readb
 	cpi 0xAA
 	jnz no_media
+	mvi a,0x0B
+	call ide_readb
+	cpi 0x55
+	jnz no_media_2
 	mvi a,'3'
 	call pchar
 	lxi h,0
@@ -258,10 +264,10 @@ report_ide:
 	mvi a,0x0F		! Command
 	call ide_writeb
 	lxi h,0xFE00		! buffer target
-	mvi a,'W'
-	call pchar
+!	mvi a,'W'
+!	call pchar
 	call ide_waitdrq
-	mvi a,'w'
+!	mvi a,'w'
 	call pchar
 
 	call ide_read_data	! Transfer a sector into FE00-FFFF
@@ -283,34 +289,46 @@ badload:
 	lxi h,loaderr
 	call print
 	hlt
+no_media_2:
+	push psw
+	mvi a,'!'
+	call pchar
+	pop psw
 no_media:
 	call phex
 	lxi h,nomedia
 	call print
 	hlt
 
+!
+!	FIXME needs a timeout
+!
 ide_waitdrq:
 	mvi a,0x0F		! Status
 	call ide_readb
 	mov b,a
 	ani 0x09		! DRQ or ERR
 	rnz
-	mvi a,'D'
-	call pchar
-	mov a,b
-	call phex
+!	mvi a,'D'
+!	call pchar
+!	mov a,b
+!	call phex
 	jmp ide_waitdrq
 
+!
+!	FIXME needs a timeout and err checking
+!
 ide_waitready:
 	mvi a,0x0F
 	call ide_readb
 	mov b,a
-	ani 0x41
-	rnz
-	mvi a,'R'
-	call pchar
-	mov a,b
-	call phex
+	ani 0xC0
+	cpi 0x40
+	rz
+!	mvi a,'R'
+!	call pchar
+!	mov a,b
+!	call phex
 	jmp ide_waitready
 
 !
@@ -448,19 +466,53 @@ ide_init:
 	in 0x23
 	cpi PPIDE_PPI_BUS_READ
 	jnz ide_cf_init
+	!
+
+	mvi a,1
+	sta ide_type
+
 	mvi a,PPIDE_PPI_RESET_LINE
 	out 0x22
-
-	lxi b,0xFFFF
+	lxi b,0x1000
 wait1:
 	dcx b
 	jnk wait1
 
-	mvi a,IDE_REG_STATUS
+	!
+	!	Clear the reset
+	!
+	xra a
 	out 0x22
 
-	mvi a,1
-	sta ide_type
+	lxi b,0x1000
+wait1b:
+	dcx b
+	jnk wait1b
+
+	mvi l,0x0A		! nIEN
+	mvi a,0x16		! Control
+	call ide_writeb
+	!
+	!	Wait over 150ms for sanity
+	!
+
+	lxi b,0xFFFF
+wait2:
+	xthl
+	xthl
+	xthl
+	xthl
+	xthl
+	xthl
+	xthl
+	xthl
+	dcx b
+	jnk wait2
+
+	!
+	!	PPIDE ready (we hope)
+	!
+
 	ret
 
 ide_cf_init:
@@ -579,9 +631,36 @@ cfread:
 	jnz cfread
 	ret
 
+
+!
+!	Debug
+!
+idedump:
+	push h
+	push d
+	push b
+	push psw
+	mvi e,0
+idel:	mvi a,8
+	add e
+	call ide_readb
+	call phex
+	call pspace
+	inr e
+	mvi a,8
+	cmp e
+	jnz idel
+	lxi h,newline
+	call print
+	pop psw
+	pop d
+	pop d
+	pop h
+	ret
+
 .sect .rom
 signon:
-	.ascii "C2014/85 ROM BIOS 0.1.2 for 8085/MMU"
+	.ascii "C2014/85 ROM BIOS 0.1.4 for 8085/MMU"
 	.data1 13,10
 	.asciz "Memory banks present: "
 loading:
