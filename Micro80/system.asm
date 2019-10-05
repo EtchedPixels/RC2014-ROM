@@ -244,7 +244,7 @@ strout:
 	jr strout
 
 signon:
-	db 'Micro80 CP/M ROM 0.17',13,10,0
+	db 'Micro80 CP/M ROM 0.18',13,10,0
 timeout:
 	db 'CF card not detected',13,10,0
 cfboot:
@@ -4316,6 +4316,7 @@ HOME:
 	ret		;we will move to 00 on first read
 SELDSK
 ; select disk given by register C
+	ld a,c
 	ld hl,0		;error return code
 	cp 5		;must be between 0 and 5
 	jr nc,cfselfail2	;no carry if 6,7,8...
