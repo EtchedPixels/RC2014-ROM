@@ -4327,11 +4327,19 @@ HOME:
 	ret		;we will move to 00 on first read
 SELDSK
 ; select disk given by register C
+	ld a,c
 	ld hl,0		;error return code
 	cp 6		;must be between 0 and 5
 	jr nc,cfselfail2	;no carry if 6,7,8...
 ; disk number is in the proper range
+	cp 5		;check for RAM disc
+	jr nz, notram
+	ld a,(r16bug)	; No RAMdisc on non reworked Simple80
+	or a
+	jr nz, cfselfail2	; No RAMdisc if you haven't fixed the PCB
+
 ; compute proper disk parameter header address
+notram:
 	ld a,c
 	ld (diskno),a
 	add a,a		; 0-5 cannot overflow a byte
@@ -4712,6 +4720,8 @@ all05:	ds 8		;ALV for RAMdrive
 cfinit:	db 0
 lastsel: dw 0ffffh
 
+r16bug:
+	db 0		; Is the R16 rework needed ?
 	org 0ff00h
 ;
 ;	This block is copied to both ram banks so we can use it for block
@@ -4763,6 +4773,17 @@ ramdisc_init:
 	out (SIOBCmd),a
 	ld a,40h
 	out (SIOBCmd),a
+	ld hl,(0)
+	ld de,0C3F3h
+	or a
+	sbc hl,de
+	jr nz, ramdisc_ok
+	ld hl,workaround
+	call strout
+	ld a,1
+	ld (r16bug),a
+	ret
+ramdisc_ok:
 	ld hl,0000h
 	ld de,0001h
 	ld bc,003ffh
@@ -4773,6 +4794,9 @@ ramdisc_init:
 	xor a
 	out (SIOBCmd),a
 	ret
+
+workaround:
+	db 'R16 workaround required',13,10,0
 ;
 ;	Wipe the RAMdisc. We rely on the helper already being in both RAM
 ;	banks
