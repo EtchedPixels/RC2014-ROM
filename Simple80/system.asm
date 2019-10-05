@@ -4176,20 +4176,29 @@ WBOOT:
 	ld hl,ccp
 	ld de,ccp
 	ld bc, FBASE-ccp
+ccp_copier:
+	ld (hl),0
 	ld a,1
 	out (SIOACmd),a		; ROM in
 	dec a
 	out (SIOACmd),a
-	ldir			; mirror back into RAM
+;
+;	The CCP will have changed so we can't just ldir but must
+;	play dirty
+;
+	ldi			; mirror back into RAM
+
 	inc a
 	out (SIOACmd),a		; ROM out
 	ld a,40h
 	out (SIOACmd),a
+	pop af
+	jp nz, ccp_copier
 
 ; end of load operation, set parameters and go to cp/m
 gocpm:
 	ld a,0c3h		;c3 is a jmp instruction
-	ld (0),a		; fro jmp to wboot
+	ld (0),a		; for jmp to wboot
 	ld hl,wboote		;wboot entry point
 	ld (1),hl		; set address field for jmp at 0
 	ld (5),a		; for jmp to bdos
@@ -4204,7 +4213,7 @@ gocpm:
 	ld a,h
 	or l
 	jr nz, gocpmok
-	ld c,0			; force drive A due to bad select
+	ld c,4			; force drive E due to bad select
 gocpmok:
 	jp ccp			;go to cp/m for further processing
 
@@ -4639,7 +4648,9 @@ read_ramrom:
 	ld b,128
 romsector_copy:
 	push bc
+	push de
 	call do_get_rom
+	pop de
 	pop bc
 	ld (de),a
 	inc hl
@@ -4755,17 +4766,20 @@ do_get_far:
 	ld a,b
 	ret
 do_get_rom:
+	ld e,(hl)	; save RAM content
 	ld c,SIOACmd
 	ld a,1
 	out (c),a
 	xor a
+	ld (hl),a	; clear RAM byte so it doesn't interfere
 	out (c),a
-	ld b,(hl)
+	ld b,(hl)	; fetch from ROM (RAM will just pull down via resistors
 	ld a,1
 	out (c),a
 	ld a,40h
 	out (c),a
 	ld a,b
+	ld (hl),e
 	ret
 ramdisc_init:
 	; Wipe the RAMdisc
