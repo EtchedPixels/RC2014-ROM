@@ -4188,7 +4188,7 @@ ccp_copier:
 	out (SIOACmd),a
 	ld a,5
 	out (SIOACmd),a		; RAM out
-	ld a,0e8h
+	ld a,06ah
 	out (SIOACmd),a
 
 	ldi			; mirror back into RAM
@@ -4785,7 +4785,7 @@ do_get_rom:
 	out (c),a
 	ld a,5		; Turn off the RAM so we can read a rom data byte
 	out (c),a
-	ld a,0e8h
+	ld a,06ah
 	out (c),a	; RAM output enables off
 	ld b,(hl)	; fetch from ROM (RAM will just pull down via resistors
 	ld a,5
