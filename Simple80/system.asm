@@ -42,7 +42,7 @@ LBA_1    	equ 94h       	;CF LA8-15
 LBA_2   	equ 95h       	;CF LA16-23
 LBA_3   	equ 96h       	;CF LA24-27
 CMD   		equ 97h       	;CF status/command reg
-CFSTATUS		equ 97h       	;CF status/command reg
+CFSTATUS	equ 97h       	;CF status/command reg
 
 ERR		equ 0
 DRQ		equ 3
@@ -4172,23 +4172,32 @@ BOOT:
 WBOOT:
 ;
 ;	We have the CCP in ROM so just magic it back over
+;	This code is also mirrrored exactly between ROM and RAM
 ;
 	ld hl,ccp
 	ld de,ccp
 	ld bc, FBASE-ccp
 ccp_copier:
-	ld (hl),0
+;
+;	The CCP will have changed so we can't just ldir but must
+;	play safe
+;
 	ld a,1
 	out (SIOACmd),a		; ROM in
 	dec a
 	out (SIOACmd),a
-;
-;	The CCP will have changed so we can't just ldir but must
-;	play dirty
-;
+	ld a,5
+	out (SIOACmd),a		; RAM out
+	ld a,0e8h
+	out (SIOACmd),a
+
 	ldi			; mirror back into RAM
 
-	inc a
+	ld a,5
+	out (SIOACmd),a		; RAM in
+	ld a,0eah
+	out (SIOACmd),a
+	ld a,1
 	out (SIOACmd),a		; ROM out
 	ld a,40h
 	out (SIOACmd),a
@@ -4765,21 +4774,29 @@ do_get_far:
 	out (c),a
 	ld a,b
 	ret
+;
+;	This routine needs to be mirrored in ROM and RAM
+;
 do_get_rom:
-	ld e,(hl)	; save RAM content
-	ld c,SIOACmd
+	ld c,SIOACmd	; Turn on the ROM
 	ld a,1
-	out (c),a
+	out (c),a	; Our executable bytes will match the RAM so all is good
 	xor a
-	ld (hl),a	; clear RAM byte so it doesn't interfere
 	out (c),a
+	ld a,5		; Turn off the RAM so we can read a rom data byte
+	out (c),a
+	ld a,0e8h
+	out (c),a	; RAM output enables off
 	ld b,(hl)	; fetch from ROM (RAM will just pull down via resistors
-	ld a,1
+	ld a,5
+	out (c),a	; Turn the RAM back on so we have something
+	ld a,0eah	; to execute from when we turn the ROM off
+	out (c),a
+	ld a,1		; Turn the ROM back off
 	out (c),a
 	ld a,40h
 	out (c),a
 	ld a,b
-	ld (hl),e
 	ret
 ramdisc_init:
 	; Wipe the RAMdisc
