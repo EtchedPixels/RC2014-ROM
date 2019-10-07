@@ -6,6 +6,9 @@
 ; - Move to ZSDOS (smaller, faster, cleaner, freer).
 ; - Move CP/M up further in memory.
 ;
+; TODO
+; - SPI SDCARD
+;
 ; Changes Alan Cox (C) 2019
 ;
 ; Based on CP/M 2.2 BIOS and also
@@ -58,6 +61,30 @@ start:
 ; variable area
 	org 0da00h
 main:
+	;
+	;	On a modified board we need force the RAM state to sanity.
+	;	On an unmodified board this is a no-op
+	;
+	;
+
+	ld c,SIOACmd
+	ld hl,SIOResetA
+	ld b,3
+	otir
+	ld c,SIOBCmd
+	ld hl,SIOResetB
+	ld b,3
+	otir
+
+	;
+	;	We have forced
+	;	RTSB/DTRB/RTSA = 1
+	;
+	;	So we know that on a modified board
+	;	a) we are writing to the bottom bank
+	;	b) if it is a 128K RAM CS2 is set
+	;
+
 	ld hl,0		;Run entire ROM into base RAM bank
 	ld d,h
 	ld e,l
@@ -65,31 +92,70 @@ main:
 	ld c,l
 	ldir
 
+	;
+	;	A side effect here is that A15 is low so this works with
+	;	the modified SIO decode.
+	;
+
 	ld c,SIOBCmd	;initialize SIO chan B
         ld hl,SIOIni    ;Point to initialisation data
         ld b,9	 	;Length of ini data
         otir            ;Write data to output port C
 
+	; ROM is now off, RAMen is on
+	; Now copy the stubs to each bank
+	ld hl,banktab
+nextbank:
+	; Read an entry from the table to write to WR5
+	ld a,(hl)
+	or a
+	jr z, banks_next
+	inc hl
+	ld d,5
+	out (c),d	; switch bank
+	out (c),a
+
+	exx
 	ld hl,0ff00h	; copy FFxx range for CP/M into alt bank
 	ld d,h
 	ld e,l
 	ld bc,0100h
 	ldir
+	exx
+	; Cycle through the table until we hit 0
+	jr nextbank
 
-	; Quick check if the RAMdisc is initialized
-	ld hl, (0fefeh)
-	ld de, 0d15ch
-	xor a
-	sbc hl,de
-	jr z, rdsave
-	inc a
-rdsave:
-	ld e,a		; Save RAMdisc init flag
+banks_next:
+	; 0,0 is end. If not then we need to flip RTSA (A18)
+	; and do the second set
+	inc hl
+	ld a,(hl)
+	or a
+	jr z, banks_done
+	ld c,SIOACmd
+	ld a,5
+	out (c),a
+	ld a,068h	; ROM still on upper bank if 512K
+	out (c),a
+	ld c,SIOBCmd
+	jr nextbank
+
+banks_done:
+	; Banks entirely done
+	ld c,SIOACmd
+	ld a,5
+	out (c),a
+	ld a,06ah	; ROM still on but lower bank
+	out (c),a
 
 	ld c,SIOBCmd	; back to main bank
 	ld a,1
 	out (c),a
 	dec a
+	out (c),a
+	ld a,5
+	out (c),a
+	ld a,0eah	; back to main bank if modded
 	out (c),a
 
 	ld c,SIOACmd	;initialize SIO chan A
@@ -117,6 +183,9 @@ rdinit:
 	call strout
 	call ramdisc_init
 nordinit:
+	;
+	;	TODO: check for CF versus SD
+	;
 	ld hl,bootcf
 	call strout
 	ld de,0		; Give the CF time to start
@@ -218,24 +287,38 @@ SIOIni: db  18h     ; Wr0 Channel reset
         db  0c1h     ; Wr3 Receive enable, 8 bit 
         db  5     ; Wr0 Pointer R5
         db  0eah     ; Wr5 Transmit enable, 8 bit, flow ctrl
+		     ; force DTR and RTS high
         db  11h     ; Wr0 Pointer R1 + reset ex st int
         db  40h     ; Wr1 No Tx interrupts, set READY high
+SIOResetA:
+	db  18h	    ; Reset
+	db  05h	    ; WR5
+	db  06ah    ; DTR low RTS high (ROM enabled)
+SIOResetB:
+	db  18h	    ; Reset
+	db  05h	    ; WR5
+	db  0eah    ; DTR high, RTS high
 
 cin:
-	in a,(SIOACmd)	;check data ready
+	ld bc,SIOACmd
+	in a,(c)	;check data ready
 	bit 0,a
 	jr z,cin
 	in a,(SIOAData)	;get data in reg A
 	ret
 
 cout:
+	push bc
 	push af		;save register
 cout1:
-	in a,(SIOACmd)	;get status
+	ld bc,SIOACmd
+	in a,(c)	;get status
 	bit 2,a		;transmit reg full?
 	jr z,cout1
 	pop af		;restore reg
-	out (SIOAData),a	;transmit the character
+	dec c		;SIOAData
+	out (c),a	;transmit the character
+	pop bc
 	ret
 
 strout:
@@ -245,21 +328,6 @@ strout:
 	inc hl
 	call cout
 	jr strout
-
-signon:
-	db 'Simple 80 CP/M ROM 0.17',13,10,0
-bootcf:
-	db 'Initializing CF adapter',13,10,0
-timeout:
-	db 'CF card not detected',13,10,0
-cfboot:
-	db 'Booting from CF adapter',13,10,0
-idefail:
-	db 'CF read failed',13,10,0
-formatram:
-	db 'Formatting RAMdisc',13,10,0
-welcome:
-	db 'CP/M 2.2 (C) 1979 Digital Research',13,10,0
 
 	org 0dc00h
 ;
@@ -4177,30 +4245,34 @@ WBOOT:
 	ld hl,ccp
 	ld de,ccp
 	ld bc, FBASE-ccp
+	exx
+	ld bc,SIOACmd
 ccp_copier:
 ;
 ;	The CCP will have changed so we can't just ldir but must
 ;	play safe
 ;
 	ld a,1
-	out (SIOACmd),a		; ROM in
+	out (c),a		; ROM in
 	dec a
-	out (SIOACmd),a
+	out (c),a
 	ld a,5
-	out (SIOACmd),a		; RAM out
+	out (c),a		; RAM out
 	ld a,06ah
-	out (SIOACmd),a
+	out (c),a
 
+	exx
 	ldi			; mirror back into RAM
+	exx
 
 	ld a,5
-	out (SIOACmd),a		; RAM in
+	out (c),a		; RAM in
 	ld a,0eah
-	out (SIOACmd),a
+	out (c),a
 	ld a,1
-	out (SIOACmd),a		; ROM out
+	out (c),a		; ROM out
 	ld a,40h
-	out (SIOACmd),a
+	out (c),a
 	pop af
 	jp nz, ccp_copier
 
@@ -4230,7 +4302,8 @@ gocpmok:
 ;console status, return 0ffh if char ready
 ; RxRdy status bit is D[0] for SIO chan A
 DEVCONST:
-	in a,(SIOACmd)		; Read status from SIOA
+	ld bc,SIOACmd
+	in a,(c)		; Read status from SIOA
 	and 1			; data available?
 	ret z			; return with 0 if data not available	
 	ld a,0ffh		; else data is available, return with 0ffh
@@ -4239,21 +4312,26 @@ DEVCONST:
 DEVCONIN:
 ; console char into reg A
 ; RxRdy status bit is D[0] for SIO chan A
-	in a,(SIOACmd)		; Read statusfrom SIOA
+	ld bc,SIOACmd
+	in a,(c)		; Read statusfrom SIOA
 	and 1			; data available?
 	jr z,DEVCONIN
-	in a,(SIOAData)		; Read character
+	dec c			; now SIOAData
+	in a,(c)		; Read character
 	ret
 DEVCONOUT:
 ;console char output from reg C
-	in a,(SIOACmd)		;get transmit status
+	ld e,c
+	ld bc,SIOACmd
+	in a,(c)		;get transmit status
 	bit 2,a			;transmit empty?
 	jr z,DEVCONOUT
-	ld a,c			;get char to accumulator
-	out (SIOAData),a	;put out the character
+	dec c			;SIOAData
+	out (c),e		;put out the character
 	ret
 DEVCONRDY:
-	in a,(SIOACmd)
+	ld bc,SIOACmd
+	in a,(c)
 	and 1
 	ret z
 	ld a,0ffh
@@ -4264,7 +4342,8 @@ DEVLIST:
 	jr DEVPUNCH
 DEVLISTST:
 ; return list status (0 if not ready, 1 if ready)
-	in a,(SIOBCmd)
+	ld bc,SIOBCmd
+	in a,(c)
 	bit 2,a
 	ld a,0
 	ret z
@@ -4272,18 +4351,22 @@ DEVLISTST:
 	ret
 DEVPUNCH:
 ; punch char from reg C
-	in a,(SIOBCmd)		;get transmit status
+	ld e,c			;save char
+	ld bc,SIOBCmd
+	in a,(c)		;get transmit status
 	bit 2,a			;transmit empty?
 	jr z,DEVPUNCH
-	ld a,c			;get char to accumulator
-	out (SIOBData),a	;put out the character
+	dec c			;SIOBData
+	out (c),e		;put out the character
 	ret
 DEVREADER:
 ; read char into reg A from reader device
-	in a,(SIOBCmd)		; Read statusfrom SIOA
+	ld bc,SIOBCmd
+	in a,(c)		; Read statusfrom SIOA
 	and 1			; data available?
 	jr z,DEVREADER
-	in a,(SIOBData)		; Read character
+	dec c			; SIOBData
+	in a,(c)		; Read character
 	ret
 
 ;
@@ -4740,6 +4823,37 @@ all05:	ds 8		;ALV for RAMdrive
 cfinit:	db 0
 lastsel: dw 0ffffh
 
+; FIXME: move the early messages into CFsecdata 0-3, dirbf etc
+
+signon:
+	db 'Simple 80 CP/M ROM 0.17',13,10,0
+bootcf:
+	db 'Initializing CF adapter',13,10,0
+timeout:
+	db 'CF card not detected',13,10,0
+cfboot:
+	db 'Booting from CF adapter',13,10,0
+idefail:
+	db 'CF read failed',13,10,0
+formatram:
+	db 'Formatting RAMdisc',13,10,0
+welcome:
+	db 'CP/M 2.2 (C) 1979 Digital Research',13,10,0
+workaround:
+	db 'R16 workaround required',13,10,0
+
+banktab:
+	db	0e8h
+	db	06ah
+	db	068h
+	db	0
+	db	0eah
+	db	0e8h
+	db	06ah
+	db	068h
+	db	0
+	db	0
+
 r16bug:
 	db 0		; Is the R16 rework needed ?
 	org 0ff00h
@@ -4749,36 +4863,60 @@ r16bug:
 ;	ROM objects without hitting the r/w hazards in the design.
 ;
 do_put_far:
-	ld c,SIOBCmd
-	ld b,a
+	push bc
+	push de
+	ld bc,SIOBCmd
+	ld d,a
 	ld a,1
 	out (c),a
 	ld a,40h
 	out (c),a
-	ld (hl),b
+	ld a,5
+	out (c),a
+	ld a,0e8h	; RAM bank 1
+	out (c),a
+	ld (hl),d
 	ld a,1
 	out (c),a
 	dec a
 	out (c),a
+	ld a,5
+	out (c),a
+	ld a,0eah
+	out (c),a
+	pop de
+	pop bc
 	ret
 do_get_far:
-	ld c,SIOBCmd
+	push de
+	push bc
+	ld bc,SIOBCmd
 	ld a,1
 	out (c),a
 	ld a,40h
 	out (c),a
-	ld b,(hl)
+	ld a,5
+	out (c),a
+	ld a,0e8h	; RAM bank 1
+	out (c),a
+	ld d,(hl)
 	ld a,1
 	out (c),a
 	dec a
 	out (c),a
-	ld a,b
+	ld a,5
+	out (c),a
+	ld a,0eah
+	out (c),a
+	pop bc
+	ld a,d
+	pop de
 	ret
 ;
 ;	This routine needs to be mirrored in ROM and RAM
 ;
 do_get_rom:
-	ld c,SIOACmd	; Turn on the ROM
+	ld bc,SIOACmd	; Turn on the ROM
 	ld a,1
 	out (c),a	; Our executable bytes will match the RAM so all is good
 	xor a
@@ -4800,10 +4938,15 @@ do_get_rom:
 	ret
 ramdisc_init:
 	; Wipe the RAMdisc
+	ld bc,SIOBCmd
 	ld a,1
-	out (SIOBCmd),a
+	out (c),a
 	ld a,40h
-	out (SIOBCmd),a
+	out (c),a
+	ld a,5
+	out (c),a
+	ld a,0e8h	; Switch RAM bank if modified
+	out (c),a
 	ld hl,(0)
 	ld de,0C3F3h
 	or a
@@ -4817,17 +4960,23 @@ ramdisc_init:
 ramdisc_ok:
 	ld hl,0000h
 	ld de,0001h
-	ld bc,003ffh
+	ld bc,007ffh
 	ld (hl),0e5h
 	ldir
-	ld a,1
-	out (SIOBCmd),a
+	inc c
+	ld a,c		; A = 1
+	inc c
+	inc c		; BC is now 3 (SIOBCmd)
+	out (c),a
 	xor a
-	out (SIOBCmd),a
+	out (c),a
+	ld a,5
+	out (c),a
+	ld a,0eah	; Main RAM if modified
+	out (c),a
 	ret
 
-workaround:
-	db 'R16 workaround required',13,10,0
+
 ;
 ;	Wipe the RAMdisc. We rely on the helper already being in both RAM
 ;	banks
