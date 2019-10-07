@@ -4242,29 +4242,22 @@ WBOOT:
 ;	We have the CCP in ROM so just magic it back over
 ;	This code is also mirrrored exactly between ROM and RAM
 ;
-	ld hl,ccp
-	ld de,ccp
-	ld bc, FBASE-ccp
-	exx
 	ld bc,SIOACmd
-ccp_copier:
-;
-;	The CCP will have changed so we can't just ldir but must
-;	play safe
-;
 	ld a,1
 	out (c),a		; ROM in
 	dec a
 	out (c),a
 	ld a,5
-	out (c),a		; RAM out
+	out (c),a		; RAM OE off
 	ld a,06ah
 	out (c),a
 
-	exx
-	ldi			; mirror back into RAM
-	exx
+	ld hl,ccp
+	ld de,ccp
+	ld bc, FBASE-ccp
+	ldir
 
+	ld c,SIOACmd
 	ld a,5
 	out (c),a		; RAM in
 	ld a,0eah
@@ -4273,8 +4266,6 @@ ccp_copier:
 	out (c),a		; ROM out
 	ld a,40h
 	out (c),a
-	pop af
-	jp nz, ccp_copier
 
 ; end of load operation, set parameters and go to cp/m
 gocpm:
