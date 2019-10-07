@@ -171,10 +171,12 @@ banks_done:
 
 	; Quick check if the RAMdisc is initialized
 	ld hl,0fefeh
+	ld de,0e8eah
 	call do_get_far
 	cp 05ch
 	jr nz, rdinit
 	inc hl
+	ld de,0e8eah
 	call do_get_far
 	cp 0d1h
 	jr z, nordinit
@@ -4752,7 +4754,10 @@ rnext:
 	push bc
 	; Loads (HL) from the far bank into A
 	; Uses BC, A
+	push de
+	ld de,0e8eah
 	call do_get_far
+	pop de
 	ld (de),a
 	inc de
 	inc hl
@@ -4776,7 +4781,10 @@ wnext:
 	ld a,(de)
 	; Loads (HL) from the far bank with A
 	; Uses BC, A
+	push de
+	ld de, 0e8eah
 	call do_put_far
+	pop de
 	inc de
 	inc hl
 	pop bc
@@ -4855,42 +4863,43 @@ r16bug:
 ;
 do_put_far:
 	push bc
-	push de
-	ld bc,SIOBCmd
-	ld d,a
+
+	ex af,af'	; save byte to write
+
+	; DE tells us the far bank to select (on unmodified we ignore it and
+	; just use WAIT/READYB
+
+	ld bc,SIOACmd
+	ld a,5
+	out (c),a
+	out (c),e	; Upper bank bits passed in E
+	ld c,SIOBCmd
 	ld a,1
 	out (c),a
 	ld a,40h
 	out (c),a
 	ld a,5
 	out (c),a
-	ld a,0e8h	; RAM bank 1
-	out (c),a
-	ld (hl),d
-	ld a,1
-	out (c),a
-	dec a
-	out (c),a
-	ld a,5
-	out (c),a
-	ld a,0eah
-	out (c),a
-	pop de
-	pop bc
-	ret
+	out (c),d	; Lower bank bits passed in D
+	ex af,af'	; Restore user data
+	ld (hl),a
+	jr bank_restore
 do_get_far:
-	push de
 	push bc
-	ld bc,SIOBCmd
+	ld bc,SIOACmd
+	ld a,5
+	out (c),a
+	out (c),e	; Upper bank bits passed in E
+	ld c,SIOBCmd
 	ld a,1
 	out (c),a
 	ld a,40h
 	out (c),a
 	ld a,5
 	out (c),a
-	ld a,0e8h	; RAM bank 1
-	out (c),a
-	ld d,(hl)
+	out (c),d	; Lower bank bits passed in D
+	ld d,(hl)	; D is now free
+bank_restore:
 	ld a,1
 	out (c),a
 	dec a
@@ -4901,7 +4910,6 @@ do_get_far:
 	out (c),a
 	pop bc
 	ld a,d
-	pop de
 	ret
 ;
 ;	This routine needs to be mirrored in ROM and RAM
@@ -4954,19 +4962,16 @@ ramdisc_ok:
 	ld bc,007ffh
 	ld (hl),0e5h
 	ldir
-	inc c
-	ld a,c		; A = 1
-	inc c
-	inc c		; BC is now 3 (SIOBCmd)
+	ld c,SIOBCmd	; B is 0
+	ld a,1
 	out (c),a
 	xor a
 	out (c),a
 	ld a,5
 	out (c),a
-	ld a,0eah	; Main RAM if modified
+	ld a,0eah
 	out (c),a
 	ret
-
 
 ;
 ;	Wipe the RAMdisc. We rely on the helper already being in both RAM
