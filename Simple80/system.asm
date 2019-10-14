@@ -102,7 +102,6 @@ main:
         ld b,9	 	;Length of ini data
         otir            ;Write data to output port C
 
-	; ROM is now off, RAMen is on
 	; Now copy the stubs to each bank
 	ld hl,banktab
 nextbank:
@@ -116,10 +115,10 @@ nextbank:
 	out (c),a
 
 	exx
-	ld hl,0ff00h	; copy FFxx range for CP/M into alt bank
+	ld hl,0fd00h	; copy high range for CP/M and boot into alt bank
 	ld d,h
 	ld e,l
-	ld bc,0100h
+	ld bc,0300h
 	ldir
 	exx
 	; Cycle through the table until we hit 0
@@ -135,7 +134,7 @@ banks_next:
 	ld c,SIOACmd
 	ld a,5
 	out (c),a
-	ld a,068h	; ROM still on upper bank if 512K
+	ld a,068h	; ROM still on, upper bank if 512K
 	out (c),a
 	ld c,SIOBCmd
 	jr nextbank
@@ -153,6 +152,7 @@ banks_done:
 	out (c),a
 	dec a
 	out (c),a
+
 	ld a,5
 	out (c),a
 	ld a,0eah	; back to main bank if modded
@@ -165,9 +165,12 @@ banks_done:
 
 	; We are now running from RAM as the SIO init flipped the ROM off
 
+
 	ld sp,0100h	;set up stack
 	ld hl,signon
 	call strout
+
+	call probe_board
 
 	; Quick check if the RAMdisc is initialized
 	ld hl,0fefeh
@@ -185,6 +188,20 @@ rdinit:
 	call strout
 	call ramdisc_init
 nordinit:
+	ld a,(sysflags)
+	and 3
+	cp 3
+	jr nz, no_flag_adjust
+	ld a,1
+	ld (sysflags),a	; Our probes can't tell R16 bug and modified, but
+			; we know you can't meaningfully be both
+	jr no_mod_print
+no_flag_adjust:
+	cp 2
+	jr nz, no_mod_print
+	ld hl,modded
+	call strout
+no_mod_print:
 	;
 	;	TODO: check for CF versus SD
 	;
@@ -4812,8 +4829,9 @@ CFsecdat3:
 	ds 128
 ; scratch ram area for bdos use
 dirbf: 	ds 128		;scratch directory area
-all00:	ds 256		;ALVs for the four CF volumes
-all01:	ds 256
+;all00:	ds 256		;ALVs for the four CF volumes - ALV0 is used
+			;to overwrite bootstrap stuff
+;all01:	ds 256
 all02:	ds 256
 all03:	ds 256
 all04:	ds 7		;ALV for ROMdrive
@@ -4822,10 +4840,57 @@ all05:	ds 8		;ALV for RAMdrive
 cfinit:	db 0
 lastsel: dw 0ffffh
 
-; FIXME: move the early messages into CFsecdata 0-3, dirbf etc
+r16bug:
+	db 0		; Is the R16 rework needed ?
+
+	org 0fd00h
+
+	; The 256 byte all00 buffer will blow away the boot time stuff
+	; that we no longer need
+all00:
+probe_board:
+	; Do the WAIT/READY line flip
+	ld bc,SIOBCmd
+	ld a,1
+	out (c),a
+	ld a,40h
+	out (c),a
+	; Work out if we are a modified board by seeing if we are in bank 0
+	; or 1 at this point. If the bank changed it's unmodified
+	ld hl,0
+	ld e,l
+	ld a,(hl)
+	cp 0F3h
+	jr nz, not_modded
+	inc hl
+	ld a,(hl)
+	cp 0C3h
+	jr z, is_modded
+is_modded:
+	ld e,2		; sysflags modded bit
+not_modded:
+	ld a,1
+	out (c),a
+	xor a
+	out (c),a
+	;
+	;	We are now definitively in the main bank so can write flags
+	;
+	ld a,(sysflags)
+	and 0FDh	; clear bit 1
+	or e
+	ld (sysflags),a
+	ret
+	ld hl,modded
+
+	org 0fe00h
+
+	; The 256 byte all00 buffer will blow away the boot time stuff
+	; that we no longer need
+all01:
 
 signon:
-	db 'Simple 80 CP/M ROM 0.17',13,10,0
+	db 'Simple 80 CP/M ROM 0.18',13,10,0
 bootcf:
 	db 'Initializing CF adapter',13,10,0
 timeout:
@@ -4839,7 +4904,9 @@ formatram:
 welcome:
 	db 'CP/M 2.2 (C) 1979 Digital Research',13,10,0
 workaround:
-	db 'R16 workaround required',13,10,0
+	db 'R16 fix required, no RAMdisc',13,10,0
+modded:
+	db 'Modified board detected',13,10,0
 
 banktab:
 	db	0e8h
@@ -4853,8 +4920,6 @@ banktab:
 	db	0
 	db	0
 
-r16bug:
-	db 0		; Is the R16 rework needed ?
 	org 0ff00h
 ;
 ;	This block is copied to both ram banks so we can use it for block
@@ -4955,6 +5020,8 @@ ramdisc_init:
 	call strout
 	ld a,1
 	ld (r16bug),a
+	ld hl,sysflags
+	set 0,(hl)
 	ret
 ramdisc_ok:
 	ld hl,0000h
@@ -4974,6 +5041,22 @@ ramdisc_ok:
 	ret
 
 ;
+;	Has to be in ROM as we need to turn off RAM OE
+;
+do_reboot:
+	ld bc,SIOACmd	; Turn on the ROM
+	ld a,1
+	out (c),a	; Our executable bytes will match the RAM so all is good
+	xor a
+	out (c),a
+	ld a,5
+	out (c),a
+	ld a,06ah
+	out (c),a	; RAM output enables off
+	; ROM only mapping, hit the button
+	rst 0
+
+;
 ;	Wipe the RAMdisc. We rely on the helper already being in both RAM
 ;	banks
 ;
@@ -4982,9 +5065,22 @@ ramdisc_ok:
 ;
 	org 0ffe0h
 put_far:
-	jp do_put_far
+	jp do_put_far			; FFE0
 get_far:
-	jp do_get_far
+	jp do_get_far			; FFE3
 get_rom:
-	jp do_get_rom
+	jp do_get_rom			; FFE6
+reboot:
+	jp do_reboot			; FFE9
+unused:
+	jp 0				; FFEC
+	jp 0				; FFEF
+	jp 0				; FFF2
+	jp 0				; FFF5
+	jp 0				; FFF8
+	jp 0				; FFFB
+	; FFFE: flags
+sysflags:		; Valid in main bank only
+	dw 0		; bit 0 = R16bug
+			; bit 1 = Reworked memor mapping
 	end
