@@ -12,5 +12,12 @@ a banked system.
 
 # Experimental CP/M ROM for Simple 80
 
-An (emulator tested only at this point) CP/M ROM for Simple 80
+A CP/M ROM for Simple 80
+
+# Firmware for the RC2014 8085/MMU System
+
+Boot ROM and bootblocks for RC2014 8085/MMU with either an ACIA or 16x50 for
+serial and with IDE CF or PPIDE disk interfaces.
+
+
 
