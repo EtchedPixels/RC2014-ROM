@@ -59,10 +59,10 @@ start:
 	LDAA #$8C
 	STAA $80,X
 
-	LDX #0
-sleep4:
-	DEX
-	BNE sleep4
+;	LDX #0
+;sleep4:
+;	DEX
+;	BNE sleep4
 
 ;
 ;	Something resembling sanity now exists. We have 32K RAM low, 32K ROM
@@ -72,7 +72,7 @@ sleep4:
 	LDAA #$CF
 	STAA $80,X
 
-	LDX #$8000
+	LDX #$7FFF
 	TXS
 	LDX #hello
 	JSR outstring
@@ -87,8 +87,8 @@ sleep4:
 	LDAA #10
 	LDX #0
 sleep2:
-	DEX
-	BNE sleep2
+;	DEX
+;	BNE sleep2
 	STAA $FE80
 	DECA
 	BNE sleep2
@@ -224,28 +224,28 @@ outcharhexspc:
 	BSR outchar
 	PULA
 outcharhex:
-	TAB
+	PSHA
 	LSRA
 	LSRA
 	LSRA
 	LSRA
 	BSR outcharhex1
-	TBA
+	PULA
 outcharhex1:
 	ANDA #$0F
-	ADDA #'0'
-	CMPA #'9'+1
-	BCC outchar
-	INCA
+	ADDA #$30
+	CMPA #$3A
+	BCS outchar
+	ADDA #7
 outchar:
 	PSHA
 outcharw:
 	; FIXME: switch to TIM once have a 6303 assembler
-	LDAA $FEC5
+	LDAA $11
 	ANDA #$20
 	BEQ outcharw
 	PULA
-	STAA $FEC0
+	STAA $13
 outdone1:
 	RTS
 
