@@ -4652,7 +4652,7 @@ WRITE:
 	jr z,DMA2BUF
 preREAD:
 	call READnew
-	jr nz, badwrite
+	jr z, badwrite
 ; copy 128byte data pointed by DMA to 512byte sector buffer
 DMA2BUF:
 	ld hl,(dmaad)	; get DMA address
@@ -4890,7 +4890,7 @@ not_modded:
 all01:
 
 signon:
-	db 'Simple 80 CP/M ROM 0.18',13,10,0
+	db 'Simple 80 CP/M ROM 0.19',13,10,0
 bootcf:
 	db 'Initializing CF adapter',13,10,0
 timeout:
