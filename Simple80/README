@@ -1,4 +1,4 @@
-This is a prototype ROM CP/M for Simple 80
+This is a boot ROM CP/M for Simple 80
 
 At boot time the CF is checked for a signature and autobooted if this is
 present (for running things like Fuzix). If not then CP/M is entered.
@@ -16,9 +16,6 @@ CP/M which is not only nicer than the usual MBASIC but also 8K smaller
 leaving you more ROM drive room).
 
 http://www.bbcbasic.co.uk/bbcbasic/z80basic.html
-
-If you don't use MBASIC you'll need to tweak the message in the ROM about
-how to enter BASIC
 
 The cpmtools definition for the ROM disc image is
 
@@ -46,9 +43,10 @@ end
 
 
 and you can use that to assemble a cpm.raw which make will assemble into your
-disk image.
+disk image if you are not using the Makefiles
 
 
 Things to do
 
 Move CP/M and the BIOS up as far as possible to get a bigger TPA
+Spot 512K RAM and use a bigger RAMDISC
