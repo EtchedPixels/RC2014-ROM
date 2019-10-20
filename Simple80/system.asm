@@ -46,6 +46,7 @@ LBA_2   	equ 95h       	;CF LA16-23
 LBA_3   	equ 96h       	;CF LA24-27
 CMD   		equ 97h       	;CF status/command reg
 CFSTATUS	equ 97h       	;CF status/command reg
+FF_CFSTATUS	equ 0FF97h	;CF status with B set up
 
 ERR		equ 0
 DRQ		equ 3
@@ -208,37 +209,59 @@ no_mod_print:
 	ld hl,bootcf
 	call strout
 	ld de,0		; Give the CF time to start
+	ld b,0FFh	; So we don't poke the UART
 	call ide_ready	;;8 wait until busy flag is cleared
 	jr z, timeout_cf
+	ld c,LBA_3
 	ld a,0e0h		;;8 set up LBA mode
-	out (LBA_3),a	;;8
+	out (c),a	;;8
+	ld c,ERROR
 	ld a,1		;;8 set feature to 8-bit interface
-	out (ERROR),a	;;8
+	out (c),a	;;8
 	ld a,0efh		;;8 set feature command
-	out (CMD),a	;;8
+	ld c,CMD
+	out (c),a	;;8
 	call ide_ready	;;8 wait until busy flag is cleared
 	jr z, timeout_cf
 	ld a,1
 	ld (cfinit),a	; CF init completed (so CP/M doesn't keep redoing it)
 
 	ld hl,0100h
-	xor a
-	out (LBA_0),a
-	out (LBA_1),a
-	out (LBA_2),a
+	ld a,1
+	ld c,LBA_0
+	out (c),a
+	dec a
+	inc c
+	out (c),a	; LBA_1
+	inc c
+	out (c),a	; LBA_2
 	inc a
-	out (COUNT),a
+	ld c,COUNT
+	out (c),a
 	ld a,20h
-	out (CMD),a
+	ld c,CMD
+	out (c),a
 	nop
 	ld de,04000h
 	call ide_wait_drq
 	jr z, timeout_cf
 	bit ERR,a
 	jr nz, ide_error
-	ld bc, DATA
-	inir
-	inir
+	ld c, DATA
+	;
+	;	Ok this is the hairy bit. We need to do 512 bytes
+	;	but we need to keep B at 0xFF. We don't bother
+	;	unrolling it as this is boot time slow code anyway
+	;
+	xor a
+ide_rd:
+	ini
+	inc b
+	ini
+	inc b
+	dec a
+	jr nz,ide_rd
+
 	ld hl,0100h
 	ld a,'B'
 	cp (hl)
@@ -274,27 +297,31 @@ enter_cpm:
 	jp 0f200h		; BIOS starting address of CP/M
 
 ide_ready:
+	ld c,CFSTATUS
+ide_ready_l:
 	dec de
 	ld a,d
 	or e
 	ret z
-	in a,(CFSTATUS)
+	in a,(c)
 	bit BUSY,a
-	jr nz, ide_ready
+	jr nz, ide_ready_l
 	bit READY,a
-	jr z, ide_ready
+	jr z, ide_ready_l
 	ret			; NZ
 
 ide_wait_drq:
+	ld c,CFSTATUS
+ide_wait_drq_l:
 	dec de
 	ld a,d
 	or e
 	ret z
-	in a,(CFSTATUS)
+	in a,(c)
 	bit ERR,a
 	ret nz
 	bit DRQ,a
-	jr z, ide_wait_drq
+	jr z, ide_wait_drq_l
 	ret			; NZ
 
 ; SIO channel initialisation data
@@ -4474,12 +4501,15 @@ notram:
 	ld de,4000h	; Delay
 	call readbsy	;;8 wait until busy flag is cleared
 	jr z,cfselfail
-	ld a,0e0h		;;8 set up LBA mode
-	out (LBA_3),a	;;8
+	ld a,0e0h
+	ld c, LBA_3
+	out (c),a	;;8
+	ld c, ERROR
 	ld a,1		;;8 set feature to 8-bit interface
-	out (ERROR),a	;;8
+	out (c),a	;;8
 	ld a,0efh		;;8 set feature command
-	out (CFSTATUS),a	;;8
+	ld c,CMD
+	out (c),a	;;8
 	call readbsy	;;8 wait until busy flag is cleared
 	ld a,1
 	ld (cfinit),a
@@ -4588,24 +4618,48 @@ READnew:
 ; reg B contains the 512-byte sector value
 	ld a,b		; save 512-byte sector value
 	ld (CFLA07),a
-	out (LBA_0),a	; write LSB CF LA address
+	ld b,0FFh	; reference the CF adapter
+	ld c,LBA_0
+	out (c),a	; write LSB CF LA address
 	ld a,1		; read one sector
-	out (COUNT),a	; write to sector count with 1
+	ld c,COUNT
+	out (c),a	; write to sector count with 1
 	ld a,(track)	; get LSB track address
 	ld (CFLA815),a	; update current CF track value, LSB
-	out (LBA_1),a	; write to CF LA register
+	ld c,LBA_1
+	out (c),a	; write to CF LA register
 	ld a,(track+1)	; get MSB track address
 	ld (CFLA1623),a	; update current CF track value, MSB
-	out (LBA_2),a	; write to CF LA register, MSB
+	inc c		; LBA_2
+	out (c),a	; write to CF LA register, MSB
 	ld a,20h		; read CF sector command
-	out (CMD),a	; issue the CF read sector comand
+	ld c,CMD
+	out (c),a	; issue the CF read sector comand
 	ld de,4000h	; Timeout
 	call readdrq	; check drq bit set before read CF data
 	ret z
 	ld hl,CFsecdat0	; store CF data to buffer
-	ld bc,DATA	; reg C points to CF data reg
-	inir		;;8
-	inir		;;8
+	ld c,DATA	; reg C points to CF data reg
+	ld a,64
+rdloop:
+	ini		; Keep B at FF (and still as fast as inir)
+	inc b
+	ini
+	inc b
+	ini
+	inc b
+	ini
+	inc b
+	ini
+	inc b
+	ini
+	inc b
+	ini
+	inc b
+	ini
+	inc b
+	dec a
+	jr nz, rdloop
 	inc c		; ensure NZ set
 	ret
 readdrq:
@@ -4613,7 +4667,8 @@ readdrq:
 	ld a,d
 	or e
 	ret z
-	in a,(CFSTATUS)	; check data request bit set before read CF data
+	ld c,CFSTATUS
+	in a,(c)	; check data request bit set before read CF data
 	and 8		; bit 3 is DRQ, wait for it to set
 	jr z,readdrq
 	ret
@@ -4677,17 +4732,38 @@ DMA2sec:
 ; write 512byte data to CF
 ; no need to setup CFLA07, CFLA815, CFLA1623.  They already point to the correct LA
 	ld a,1		; sector count of 1
-	out (COUNT),a
+	ld b,0ffh
+	ld c,COUNT
+	out (c),a
 	ld a,30h	; CF write command
-	out (CMD),a
+	ld c,CMD
+	out (c),a
 	ld de,4000h
 	call readdrq	; check drq bit set before writing
 	jr z, badwrite
 
 	ld hl,CFsecdat0	; store CF data to buffer
-	ld bc,DATA	; reg C points to CF data reg
-	otir		;;8
-	otir		;;8
+	ld c,DATA	; reg C points to CF data reg
+	ld a,64
+wrloop:
+	outi
+	inc b
+	outi
+	inc b
+	outi
+	inc b
+	outi
+	inc b
+	outi
+	inc b
+	outi
+	inc b
+	outi
+	inc b
+	outi
+	inc b
+	dec a
+	jr nz, wrloop
 	ld de,4000h
 	call readbsy	; check busy bit for write completion
 badwrite:
@@ -4702,13 +4778,16 @@ badwrite:
 
 readbsy:
 ; spin on CF status busy bit
+	ld bc,FF_CFSTATUS
+readbsyl:
 	dec de
 	ld a,d
 	or e
 	ret z
-	in a,(CFSTATUS)	; read CF status 
+	in a,(c)	; read CF status
+	; FIXME: can't we just use jp p?
 	and 80h		; mask off all except busy bit
-	jr nz,readbsy
+	jr nz,readbsyl
 	inc a		; NZ
 	ret
 
@@ -4890,7 +4969,7 @@ not_modded:
 all01:
 
 signon:
-	db 'Simple 80 CP/M ROM 0.19',13,10,0
+	db 'Simple 80 CP/M ROM 0.21',13,10,0
 bootcf:
 	db 'Initializing CF adapter',13,10,0
 timeout:
@@ -4989,7 +5068,7 @@ do_get_rom:
 	out (c),a
 	ld a,06ah
 	out (c),a	; RAM output enables off
-	ld b,(hl)	; fetch from ROM (RAM will just pull down via resistors
+	ld d,(hl)	; fetch from ROM (RAM will just pull down via resistors
 	ld a,5
 	out (c),a	; Turn the RAM back on so we have something
 	ld a,0eah	; to execute from when we turn the ROM off
@@ -4998,7 +5077,7 @@ do_get_rom:
 	out (c),a
 	ld a,40h
 	out (c),a
-	ld a,b
+	ld a,d
 	ret
 ramdisc_init:
 	; Wipe the RAMdisc
@@ -5082,5 +5161,5 @@ unused:
 	; FFFE: flags
 sysflags:		; Valid in main bank only
 	dw 0		; bit 0 = R16bug
-			; bit 1 = Reworked memor mapping
+			; bit 1 = Reworked memory mapping
 	end
