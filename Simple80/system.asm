@@ -4496,7 +4496,7 @@ notram:
 	;
 	ld a,(cfinit)
 	or a
-	ret z
+	ret nz
 	push hl
 	ld de,4000h	; Delay
 	call readbsy	;;8 wait until busy flag is cleared
@@ -4969,7 +4969,7 @@ not_modded:
 all01:
 
 signon:
-	db 'Simple 80 CP/M ROM 0.21',13,10,0
+	db 'Simple 80 CP/M ROM 0.22',13,10,0
 bootcf:
 	db 'Initializing CF adapter',13,10,0
 timeout:
