@@ -99,6 +99,20 @@ write_vec_2:
 	;
 	; TODO: set up the bios memory space - device flag, lomem etc
 	;
+	xor ax,ax
+	mov di,400
+	mov cx,256
+wipe_bda:
+	stosw
+	loop wipe_bda
+
+	mov ax,0x0030
+	mov [es:0x410],ax	; Equipment list
+	mov ax,512
+	mov [es:0x413],ax	; Memory size
+	mov ax,80
+	mov [es:0x44A],ax	; 80 column
+
 
 	; We have a configured serial port, we've set up the vectors
 	; now start on the CF adapter
@@ -263,9 +277,84 @@ int12:
 ;	And we really need to support EDD 3.0 eventually
 ;
 int13:
+	cmp dl,0x80
+	jz int13hd
 	stc
 	retf 2
 
+int13hd:
+	cmp ah,0x1a
+	jae badint10
+	sti
+	cld
+	push si
+	xor si,si
+	mov ds,si
+	mov es,si
+	mov si,ax
+	shr si,8
+	shl si,1	; Can't just do by 7 as we might have a 1 left
+	push ds
+	mov ax,0x40
+	mov ds,ax
+	jmp [cs:hdvec]
+
+hdvec:
+	dw hd_reset			; 0
+	dw hd_status
+	dw hd_read
+	dw hd_write
+	dw hd_verify
+	dw hd_unsupported	;format
+	dw hd_unsupported	;format_bad
+	dw hd_unsupported	;format_at
+	dw hd_get_param			; 8
+	dw hd_init
+	dw hd_unsupported	;readlong
+	dw hd_unsupported	;writelong
+	dw hd_seekto
+	dw hd_resethd
+	dw hd_unsupported	;readsb
+	dw hw_unsupported	;writesb
+	dw hd_ready			; 10
+	dw hd_recalibrate
+	dw hd_unsupported	;diag1
+	dw hd_unsupported	;diag2
+	dw hd_ctrl_diag
+	dw hd_get_type
+	dw hd_unsupported	;diskchange
+	dw hd_unsupported	;disktype
+	dw hd_unsupported	; 18
+	dw hd_park
+
+hd_unsupported:
+	mov al,1
+	mov [hdstat],al
+hd_status:
+hd_popret:
+	mov al,[hdstat]
+	pop ds
+	pop si
+	iret	
+hd_ready:
+hd_recalibrate:
+hd_seekto:
+hd_reset:
+hd_resethd:
+	; FIXME - set track to 0
+hd_park:
+hd_ctrl_diag:
+hd_init:
+hd_ret0:
+	pop ds
+	pop si
+	popf
+	xor ah,ah
+	retf 0
+
+
+
+	
 ; int14 Serial - ie the console 8)
 
 int14:	
@@ -313,6 +402,12 @@ int16_3:
 
 ; int17 - the printer	
 int17:
+	cmp ah,0
+	jne int17_err
+	mov ah,0x30		; causes MSDOS to decide no printer
+	iret
+
+int17_err:
 	stc
 	retf 2
 
@@ -325,10 +420,40 @@ int18:
 int19:
 	; Boot. We only know a very simple boot model - the CF adapter
 	; TODO
+	
 	iret
 
 ; int1a - time
 int1a:
+	cmp ah,0
+	jne int1a_1
+	push ds
+	mov ax,0x40
+	mov ds,ax
+	pushf
+	cli
+	mov dx,[0x6C]
+	mov cx,[0x6E]
+	mov al,[0x70]
+	popf
+	pop ds
+	iret
+int1a_1:
+	cmp ah,1
+	jne int16_err
+	push ds
+	mov ax,0x40
+	mov ds,ax
+	pushf
+	cli
+	mov [0x6C],dx
+	mov [0x6E],cx
+	xor al,al
+	mov [0x70],al
+	popf
+	pop ds
+	iret
+int16_err:
 	stc
 	retf 2
 
@@ -336,6 +461,8 @@ int1a:
 
 ; Keyboard ctrl-break - could xlate to break key call I guess ?
 int1b:
+	; FIXME: inc 32bit 40:6C-6F, on overrun
+	; inc 40:70 byte
 	iret
 
 ; We need to call this on ticks
@@ -401,6 +528,11 @@ vectors:
 	dw	videoparam
 	dw	fdtab
 
+fdtab:
+	db 	0, 0, 50, 2, 9, 0x2a, 0, 0x50, 0xF6, 10, 10
+	db 	0, 0, 50, 2, 9, 0x2a, 0, 0x50, 0xF6, 10, 10
+	db 	0, 0, 50, 2, 9, 0x2a, 0, 0x50, 0xF6, 10, 10
+	db 	0, 0, 50, 2, 9, 0x2a, 0, 0x50, 0xF6, 10, 10
 
 ;
 ;	Top 16 bytes of image
