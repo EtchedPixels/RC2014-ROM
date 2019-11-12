@@ -2,8 +2,9 @@
 ;	We are loaded at $0200.
 ;	0000-7FFF are RAM 8000-FFFF ROM (except I/O)
 ;
-;	We load an image from 0400-FF00 skipping C000-C0FF
-;	and then jump to C102 if the marker is right
+;	We load an image from 0400-FDFF
+;	and then jump to C102 if the marker is right (this needs to move
+;	now the I/O has moved)
 ;
 
 	.zeropage
@@ -17,9 +18,10 @@ sector:	.res	1
 start:
 	; Map the full 64K to RAM
 	lda #34
-	sta $C078
+	sta $FE7A
 	lda #35
-	sta $C079
+	sta $FE7B
+	; Our map is now 32 33 34 35
 
 	lda #$00
 	sta ptr1
@@ -29,72 +31,97 @@ start:
 	lda #$01	; 0 is the partition/boot block
 	sta sector
 
+	lda #'['
+	jsr outchar
+	jsr waitready
+	lda #']'
+	jsr outchar
+	lda #$E0
+	sta $FE16	; Make sure we are in LBA mode
 dread:
 	jsr waitready
 	lda #'.'
-	sta $C0C0
+	jsr outchar
 	lda sector
 	cmp #$7D	; loaded all of the image ?
 	beq load_done
 	inc sector
-	sta $C013
+	sta $FE13
 	lda #$01
-	sta $C012	; num sectors (drives may clear this each I/O)
+	sta $FE12	; num sectors (drives may clear this each I/O)
+	jsr waitready
 	lda #$20
-	sta $C017	; read command
+	sta $FE17	; read command
 
+	lda #'D'
+	jsr outchar
 	jsr waitdrq
+	lda #'d'
+	jsr outchar
 
 	lda ptr1+1	; skip the I/O page
-	cmp #$C0
-	bne not_io
-	inc ptr1+1	; we load to BFFF..C100.... etc up to FF00
-not_io:
 	ldy #0
 bytes1:
-	lda $C010
+	lda $FE10
 	sta (ptr1),y
 	iny
 	bne bytes1
 	inc ptr1+1
 bytes2:
-	lda $C010
+	lda $FE10
 	sta (ptr1),y
 	iny
 	bne bytes2
 	inc ptr1+1
+	lda #'X'
+	jsr outchar
 	jmp dread
 
 load_done:
-	lda $C100
+	lda $C000
 	cmp #$02
 	bne bad_load
-	lda $C101
+	lda $C001
 	cmp #$65
 	bne bad_load
 
 	ldx #>running
 	lda #<running
 	jsr outstring
-	jmp $C102
+	jmp $C002
 
 bad_load:
 	ldx #>badimg
 	lda #<badimg
 	jsr outstring
+	lda $FE16
+	jsr outcharhex
+	lda $FE15
+	jsr outcharhex
+	lda $FE14
+	jsr outcharhex
+	lda $FE13
+	jsr outcharhex
 stop:
 	jmp stop
 
 waitready:
-	lda $C017
+	lda $FE17
 	and #$40
 	beq waitready
 	rts
 
 waitdrq:
-	lda $C017
-	and #$08
+	lda $FE17
+	and #$09
 	beq waitdrq
+	and #$01
+	beq wait_drq_done
+	lda $FE11
+	jsr outcharhex
+	jmp bad_load
+
+wait_drq_done:
 	rts
 
 outstring:
@@ -108,18 +135,32 @@ outstringl:
 	jsr outchar
 	iny
 	jmp outstringl
+
+outcharhex:
+	tax
+	ror
+	ror
+	ror
+	ror
+	jsr outcharhex1
+	txa
+outcharhex1:
+	and #$0F
+	clc
+	adc #'0'
+	cmp #'9'+1
+	bcc outchar
+	adc #7
 outchar:
 	pha
 outcharw:
-	lda $C0C5
+	lda $FEC5
 	and #$20
 	beq outcharw
 	pla
-	sta $C0C0
+	sta $FEC0
 outdone1:
 	rts
-
-
 badimg:
 	.byte 13,10,"Image not bootable."
 running:

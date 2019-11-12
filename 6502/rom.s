@@ -1,4 +1,9 @@
 
+	.export nmivec
+	.export resetvec
+	.export brkvec
+	.export start
+
 	.zeropage
 
 ptr1:	.res	2
@@ -19,51 +24,133 @@ ptr1:	.res	2
 start:
 	sei
 	cld
-	lda #1				; Map the ROM backwards so that we keep 
-	sta $C078			; the vectors the same (at FFFx)
-	lda #0
-	sta $C079
-	lda #32				; High 32K as card sees it, low as
-	sta $C07A			; 6502 sees it becomes RAM
-	lda #33
-	sta $C07B
-	lda #1
-	sta $C07C			; Banking on, map changes here
 ;
-;	Something resembling sanity now exists. We have 32K RAM low, 32K ROM
-;	high and the world is good
+;	LED pattern
 ;
-	ldx #0
-	txs
+	lda #$AA
+	sta $FE80
 ;
 ;	UART: 38400 8N1, RTS on, FIFO on
 ;
 	lda #$80
-	sta $C0C3
+	sta $FEC3
 	lda #$03
-	sta $C0C0
+	sta $FEC0
 	lda #$00
-	sta $C0C1
+	sta $FEC1
 	lda #$03
-	sta $C0C3
+	sta $FEC3
 	lda #$02
-	sta $C0C4
+	sta $FEC4
 	lda #$87
-	sta $C0C2
+	sta $FEC2
+
 ;
+;	This might just be my board or something but a short nap at start up
+;	helps ?
+;
+	ldx #0
+	ldy #$FE
+sleep:
+	dex
+ 	bne sleep
+	dey
+	bne sleep
+
+
 ;	Display something
 ;
+
 	lda #'R'
-	sta $C0C0
+	sta $FEC0
+
+	lda #$81
+	sta $FE80
+;
+; Now set up the memory mappings
+;
+	lda #32				; Low 32K becomes 6502 RAM
+	sta $FE78			; Needs to be this way up for a 6502
+	lda #33
+	sta $FE79
+	lda #1				; Map the ROM backwards so that we keep 
+	sta $FE7A			; the vectors the same (at FFFx)
+	lda #0
+	sta $FE7B
+
+	lda #$88
+	sta $FE80
+
+	ldx #0
+	ldy #$FE
+sleep3:
+	dex
+	bne sleep3
+	dey
+	bne sleep3
+
+	lda #1
+	sta $FE7C			; Banking on, map changes here
+
+	lda #$8C
+	sta $FE80
+
+	ldx #0
+	ldy #$FE
+sleep4:
+	dex
+	bne sleep4
+	dey
+	bne sleep4
+
+;
+;	Something resembling sanity now exists. We have 32K RAM low, 32K ROM
+;	high and the world is good
+;
+
+	lda #$CF
+	sta $FE80
+
+
+	ldx #0
+	txs
 	ldx #>hello
 	lda #<hello
 	jsr outstring
+	
+	lda #$FF
+	sta $FE80
+
 ;
-;	Try and boot
+;	Wait a while so the CF adapter has time to initialize itself
+;	and start talking sense
+;
+	lda #10
+	tax ; the 1%
+	ldy #$FE
+sleep2:
+	dex
+	bne sleep2
+	dey
+	bne sleep2
+	sta $FE80
+	clc
+	sbc #0
+	bne sleep2
+
+;
+;	Try and boot. We must wait for the adapter before we can do
+;	anything.
+;
+	jsr waitready
+;
+;
 ;
 	lda #$E0		; Drive 0, LBA
-	sta $C016
+	sta $FE16
 	jsr waitready
+
+	jsr dumpreg
 
 	ldx #>loading
 	lda #<loading
@@ -72,22 +159,24 @@ start:
 ;	8bit mode
 ;
 	lda #$01
-	sta $C011
+	sta $FE11
 	lda #$EF
-	sta $C017
+	sta $FE17
 
 	jsr waitready
+	jsr dumpreg
 
 	lda #0
-	sta $C013
-	sta $C014
-	sta $C015
+	sta $FE13
+	sta $FE14
+	sta $FE15
 	lda #1
-	sta $C012
+	sta $FE12
 	lda #$20
-	sta $C017
+	sta $FE17
 	jsr waitdrq
 
+	jsr dumpreg
 	lda #$00
 	sta ptr1
 	lda #$02
@@ -95,13 +184,14 @@ start:
 	ldy #0
 
 bytes1:
-	lda $C010
+	lda $FE10
 	sta (ptr1),y
+	jsr outcharhex
 	iny
 	bne bytes1
 	inc ptr1+1
 bytes2:
-	lda $C010
+	lda $FE10
 	sta (ptr1),y
 	iny
 	bne bytes2
@@ -118,6 +208,10 @@ bytes2:
 	jmp $0202
 
 badload:
+	lda $0200
+	jsr outcharhex
+	lda $0201
+	jsr outcharhex
 	ldx #>bad
 	lda #<bad
 outdie:
@@ -126,17 +220,50 @@ stop:
 	jmp stop
 
 waitready:
-	lda $C017
+	lda #$F0
+	sta $FE80
+waitloop:
+	lda $FE17
 	and #$40
-	beq waitready
+	beq waitloop
+	lda #$0F
+	sta $FE80
 	rts
 
 waitdrq:
-	lda $C017
-	and #$08
+	lda $FE17
+	and #$09
 	beq waitdrq
+	and #$01
+	beq wait_drq_done
+	lda $FE11
+	jsr outcharhex
+	jmp badload
+
+wait_drq_done:
 	rts
 
+dumpreg:
+	lda #'['
+	jsr outchar
+	lda $FE11
+	jsr outcharhex
+	lda $FE12
+	jsr outcharhexspc
+	lda $FE13
+	jsr outcharhexspc
+	lda $FE14
+	jsr outcharhexspc
+	lda $FE15
+	jsr outcharhexspc
+	lda $FE16
+	jsr outcharhexspc
+	lda $FE17
+	jsr outcharhexspc
+	lda #']'
+	jsr outchar
+	rts
+	
 outstring:
 	sta ptr1
 	stx ptr1+1
@@ -148,14 +275,35 @@ outstringl:
 	jsr outchar
 	iny
 	jmp outstringl
+
+outcharhexspc:
+	pha
+	lda #' '
+	jsr outchar
+	pla
+outcharhex:
+	tax
+	ror
+	ror
+	ror
+	ror
+	jsr outcharhex1
+	txa
+outcharhex1:
+	and #$0F
+	clc
+	adc #'0'
+	cmp #'9'+1
+	bcc outchar
+	adc #6	; Carry set so actually add 7
 outchar:
 	pha
 outcharw:
-	lda $C0C5
+	lda $FEC5
 	and #$20
 	beq outcharw
 	pla
-	sta $C0C0
+	sta $FEC0
 outdone1:
 	rts
 
@@ -170,7 +318,7 @@ donmi:
 	jmp outdie
 
 hello:
-	.byte "C2014 6502 512K RAM/ROM",13,10,13,10,0
+	.byte "C2014 6502 512K RAM/ROM 0.09",13,10,13,10,0
 loading:
 	.byte "Loading...",13,10,0
 booted:
