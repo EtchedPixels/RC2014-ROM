@@ -29,8 +29,14 @@ start:
 					; Only 8N1 supported
 	STAA $11
 ;
-;	Display something
+;	Display something.  We must do a wait because when we turn the UART
+;	on it is busy writing idle bits so if we don't wait the 'R' doesn't
+;	print.
 ;
+wait_uart:
+	LDAA $11
+	ANDA #$20
+	BEQ wait_uart
 
 	LDAA #'R'
 	STAA $13
@@ -59,10 +65,10 @@ start:
 	LDAA #$8C
 	STAA $80,X
 
-;	LDX #0
-;sleep4:
-;	DEX
-;	BNE sleep4
+	LDX #0
+sleep4:
+	DEX
+	BNE sleep4
 
 ;
 ;	Something resembling sanity now exists. We have 32K RAM low, 32K ROM
@@ -87,8 +93,8 @@ start:
 	LDAA #10
 	LDX #0
 sleep2:
-;	DEX
-;	BNE sleep2
+	DEX
+	BNE sleep2
 	STAA $FE80
 	DECA
 	BNE sleep2

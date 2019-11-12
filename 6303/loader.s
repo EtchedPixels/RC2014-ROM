@@ -54,7 +54,7 @@ bytes:
 	STAA ,X
 	INX
 	DECB
-	BNE bytes2
+	BNE bytes
 	BRA dread
 
 load_done:
@@ -98,7 +98,7 @@ outstring:
 	BEQ outdone1
 	BSR outchar
 	INX
-	JMP outstringl
+	JMP outstring
 
 outcharhex:
 	TAB
@@ -129,3 +129,6 @@ badimg:
 	FCC "Image not bootable."
 running:
 	FCB 13,10,0
+
+sector:
+	FCB 0
