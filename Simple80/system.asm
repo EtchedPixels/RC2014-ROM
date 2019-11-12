@@ -5068,7 +5068,7 @@ do_get_rom:
 	out (c),a
 	ld a,06ah
 	out (c),a	; RAM output enables off
-	ld d,(hl)	; fetch from ROM (RAM will just pull down via resistors
+	ld d,(hl)	; fetch from ROM
 	ld a,5
 	out (c),a	; Turn the RAM back on so we have something
 	ld a,0eah	; to execute from when we turn the ROM off
