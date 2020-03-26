@@ -2,9 +2,8 @@
 ;	We are loaded at $0200.
 ;	0000-7FFF are RAM 8000-FFFF ROM (except I/O)
 ;
-;	We load an image from 0400-FDFF
-;	and then jump to C102 if the marker is right (this needs to move
-;	now the I/O has moved)
+;	We switch to all RAM and then load an image from 0400-FDFF
+;	and then jump to 4002 if the marker is right
 ;
 
 	.zeropage
@@ -78,17 +77,17 @@ bytes2:
 	jmp dread
 
 load_done:
-	lda $C000
+	lda $4000
 	cmp #$02
 	bne bad_load
-	lda $C001
+	lda $4001
 	cmp #$65
 	bne bad_load
 
 	ldx #>running
 	lda #<running
 	jsr outstring
-	jmp $C002
+	jmp $4002
 
 bad_load:
 	ldx #>badimg
