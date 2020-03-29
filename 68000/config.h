@@ -1,0 +1,1 @@
+#define MAXDISK	16
