@@ -1,15 +1,21 @@
 all: rom
 
-CC = m68k-uclinux-gcc
-CFLAGS = -O2 -Wall -pedantic -I. 
+CC = m68k-linux-gnu-gcc
+LD = m68k-linux-gnu-ld
+OBJCOPY = m68k-linux-gnu-objcopy
 
-rom: rom.o main.o ff.o
-	m68k-uclinux-ld -M -T rom.ld rom.o main.o -o rom.elf >rom.map
-	m68k-uclinux-objcopy rom.elf -O binary rom.bin
+CFLAGS = -O2 -Wall -pedantic -fomit-frame-pointer -I.  -m68000 -fno-inline-small-functions
+
+rom: rom.o main.o ff.o platform-rc2014.o libgcc.o
+	$(LD) -M -T rom.ld rom.o main.o ff.o platform-rc2014.o libgcc.o -o rom.elf >rom.map
+	$(OBJCOPY) rom.elf -O binary rom.bin
 	dd if=rom.bin of=rom bs=512K count=1 conv=sync
 
 rom.o: rom.S
-	m68k-uclinux-gcc -c rom.S
+	$(CC) -m68000 -c rom.S
+
+libgcc.o: libgcc.S
+	$(CC) -m68000 -c libgcc.S
 
 ff.o : ff.h ffconf.h
 
