@@ -6,7 +6,25 @@
 static FRESULT report(FRESULT f);
 extern uint32_t syscall(uint32_t *argp);
 
+typedef void (*exec_t)(uint8_t *, const char *, const char *, uint32_t (*)(uint32_t *));
+
 /* C library helpers */
+
+/* ANSIfied from dLibs 1.2 and handling of 0 length compare done as per
+   convention (equality) */
+int memcmp(const void *mem1, const void *mem2, unsigned int len)
+{
+	const signed char *p1 = mem1, *p2 = mem2;
+
+	if (!len)
+		return 0;
+
+	while (--len && *p1 == *p2) {
+		p1++;
+		p2++;
+	}
+	return *p1 - *p2;
+}
 
 void *memcpy(void *dest, const void *src, unsigned int len)
 {
@@ -265,6 +283,21 @@ DSTATUS disk_initialize(BYTE drive)
 
 //PARTITION VolToPart[FF_VOLUMES];
 
+static void disk_boot(int drive)
+{
+    uint8_t buf[512];
+    if (disk_read(drive, buf, 0, 1) != RES_OK)
+        return;
+    if (memcmp(buf, "RETRODOSBOOT64", 14))
+        return;
+    /* Bootable media: most syscalls are not usable at this point but
+       some like the console are and are handy */
+    ((exec_t)buf)(buf, NULL, NULL, syscall);
+    /* If we get here the loader returned: we don't allow an exit but
+       we do allow for it to return - eg to offer a boot menu including
+       DOS from ROM */
+}
+
 static void disk_init(void)
 {
     static char path[3]= "0:";
@@ -272,6 +305,11 @@ static void disk_init(void)
     uint8_t fv = 255;
     FRESULT r;
     disk_probe();
+    for (i = 0; i < MAXDISK; i++) {
+        if (disks[i] && (disks[i]->flags & DISK_BOOTABLE)) {
+            disk_boot(i);
+        }
+    }
     for (i = 0; i < MAXDISK; i++) {
         if (disks[i] && (disks[i]->flags & DISK_PRESENT)) {
             path[0] = '0' + i;
@@ -297,7 +335,6 @@ static void disk_init(void)
  */
 static jmp_buf exitpath;
 
-typedef void (*exec_t)(uint8_t *, const char *, const char *, void *);
 
 /*
  *	Execute a binary loaded from media

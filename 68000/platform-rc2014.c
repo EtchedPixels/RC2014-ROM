@@ -248,7 +248,7 @@ struct disk cfdisk0 = {
     cf_status,
     cf_init,
     0xE0,
-    DISK_PRESENT,
+    DISK_PRESENT|DISK_BOOTABLE,
 };
 
 struct disk cfdisk1 = {

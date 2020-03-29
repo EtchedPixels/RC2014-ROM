@@ -18,6 +18,7 @@ struct disk {
 #define DISK_MEDIACHANGE	2
 #define DISK_MOUNTED		4
 #define DISK_PRESENT		8
+#define DISK_BOOTABLE		16	/* Device is a boot candidate */
     void *priv;
     FATFS fs;
 };

@@ -4,7 +4,6 @@ Minimal
 -	Sync ioctl
 -	Device size report from identify
 -	Aux and printer
--	Bootable media support
 -	strcasecmp for internal commands
 
 Ideally
