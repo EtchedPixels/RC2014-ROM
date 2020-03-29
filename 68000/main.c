@@ -1,9 +1,10 @@
 #include "ff.h"
 #include "diskio.h"
-#include "config.h"
 #include "system.h"
+#include "setjmp.h"
 
 static FRESULT report(FRESULT f);
+extern uint32_t syscall(uint32_t *argp);
 
 /* C library helpers */
 
@@ -13,6 +14,15 @@ void *memcpy(void *dest, const void *src, unsigned int len)
 	const uint8_t *sp = src;
 	while(len-- > 0)
 		*dp++=*sp++;
+	return dest;
+}
+
+void *memset(void *dest, int data, unsigned long len)
+{
+	uint8_t *p = dest;
+
+	while(len--)
+		*p++ = data;
 	return dest;
 }
 
@@ -83,6 +93,12 @@ int puts(const char *s)
     return 0;
 }
 
+void nl(void)
+{
+    putchar('\r');
+    putchar('\n');
+}
+
 static void puthexch(uint8_t n)
 {
     putchar("0123456789ABCDEF"[n & 0x0F]);
@@ -149,7 +165,7 @@ int getstr(char *buf, int len)
                 break;
             case 13:
                 *bp = 0;
-                putchar('\n');
+                nl();
                 return bp - buf;
             default:
                 if (bp == be)
@@ -162,6 +178,35 @@ int getstr(char *buf, int len)
         }
     }
 }
+
+/*
+ *	Memory manager. Very primitive for now.
+ */
+
+static struct mem mem_sys;
+
+static void mem_init(void)
+{
+    mem_probe(&mem_sys);
+    putunum(mem_sys.mem_size >> 10);
+    puts(" KiB memory free.\r\n");
+}
+
+static uint8_t *allocate(uint32_t size)
+{
+    if (mem_sys.mem_size < size)
+        return NULL;
+    return mem_sys.mem_base;
+}
+
+static void set_memory_base(uint8_t *ptr)
+{
+    /* Align the new base */
+    ptr = (uint8_t *)((((uint32_t)ptr) + 3) & ~3);
+    mem_sys.mem_size -= (ptr - mem_sys.mem_base);
+    mem_sys.mem_base = ptr;
+}
+
 
 /*
  *	High level disk interface for FATFS
@@ -233,7 +278,7 @@ static void disk_init(void)
             if ((r = f_mount(&disks[i]->fs, path, 1)) == FR_OK) {
                 puts("Mounted volume ");
                 putchar('0' + i);
-                puts(":\n");
+                puts(":\r\n");
                 if (fv == 255)
                     fv = i;
             } else
@@ -247,6 +292,62 @@ static void disk_init(void)
     curvol = fv;
 }
 
+/*
+ *	Used when we get exit type system calls
+ */
+static jmp_buf exitpath;
+
+typedef void (*exec_t)(uint8_t *, const char *, const char *, void *);
+
+/*
+ *	Execute a binary loaded from media
+ */
+static int execute(const char *head, const char *tail)
+{
+    FIL fp;
+    FRESULT r;
+    struct exec exh;
+    uint8_t *mem;
+    UINT s;
+
+    if (report(f_open(&fp, head, FA_READ)) != FR_OK)
+        return -1;
+    r = report(f_read(&fp, (void *)&exh, sizeof(exh), &s));
+    if (r != FR_OK)
+        goto bad;
+    if (s != sizeof(exh) || exh.magic != EXEC_MAGIC)
+        goto bad2;
+    mem = allocate(exh.load_size + exh.bss_size);
+    if (mem == NULL) {
+        report(FR_NOT_ENOUGH_CORE);
+        goto bad;
+    }
+    /* load binary into mem */
+    r = report(f_read(&fp, mem, exh.load_size, &s));
+    if (r != FR_OK)
+        goto bad;
+    if (s != exh.load_size)
+        goto bad2;
+    memset(mem + exh.load_size, 0, exh.bss_size);
+    /* relocate */
+    /* and close up */
+    f_close(&fp);
+    /* Path back for an exit call */
+    if (setjmp(exitpath))
+        return 0;
+    /* Don't bother with user/supervisor and other non-portable
+       complications */
+    ((exec_t)mem)(mem, head, tail, syscall);
+    /* And done when it comes back to us */
+    return 0;
+bad2:
+    puts("Invalid executable.\r\n");
+bad:
+    f_close(&fp);
+    return -1;
+}
+
+
 uint32_t syscall(uint32_t *argp)
 {
     uint16_t call = *argp++;
@@ -255,6 +356,8 @@ uint32_t syscall(uint32_t *argp)
     UINT n;
 
     switch(call) {
+        case 0x00:
+            longjmp(exitpath, 1);
         case 0x01:
             return getchar();
         case 0x02:
@@ -344,8 +447,12 @@ uint32_t syscall(uint32_t *argp)
                     (DWORD *)argp[2]);
         case 0x37:
             return -f_setlabel((const TCHAR *)argp[0]);
-            
         case 0x40:
+            return execute((const TCHAR *)argp[0], (const TCHAR *)argp[1]);
+        case 0x41:
+            set_memory_base((uint8_t *)argp[0]);
+            longjmp(exitpath, 1);
+        case 0xF0:
             return -f_mkfs((const TCHAR *)argp[0], (const MKFS_PARM *)argp[1],
                 (void *)argp[2], argp[3]);
     }
@@ -430,7 +537,7 @@ static FRESULT report(FRESULT f)
         puthexword(f);
         break;
     }
-    puts(".\n");
+    puts(".\r\n");
     return f;
 }
 
@@ -486,26 +593,26 @@ static void command_dir(char *tail)
     
     puts("            Serial ");
     putunum(clust);
-    puts("\n\n");
+    puts("\r\n\r\n");
 
     if (report(f_opendir(&dp, tail)) == FR_OK) {
         while(f_readdir(&dp, &fno) == FR_OK && fno.fname[0]) {
             puts(fno.fname);
             if (++row == 8) {
                 row = 0;
-                putchar('\n');
+                nl();
             } else
                 puts("  ");
         }
         f_closedir(&dp);
         if (row)
-            putchar('\n');
-        putchar('\n');
+            nl();
+        nl();
         if (report(f_getfree(tail, &clust, &fs)) == FR_OK) {
            putunum((fs->n_fatent - 2) * fs->csize / 2);
            puts("KiB total / ");
            putunum((clust * fs->csize) / 2);
-           puts("KiB free.\n");
+           puts("KiB free.\r\n");
         }
     }
 }
@@ -525,7 +632,7 @@ static void command_type(void)
 
     while((p = getarg()) != NULL) {
         puts(p);
-        puts(":\n");
+        puts(":\r\n");
 
         if (report(f_open(&fp, p, FA_READ)) != FR_OK)
             continue;
@@ -537,7 +644,7 @@ static void command_type(void)
         } while(l > 0);
         f_close(&fp);
     }
-    putchar('\n');
+    nl();
 }
 
 static void command_copy(void)
@@ -550,7 +657,7 @@ static void command_copy(void)
     s = getarg();
     d = getarg();
     if (s == NULL || d == NULL || getarg()) {
-        puts("COPY [FROM] [TO]\n");
+        puts("COPY [FROM] [TO]\r\n");
         return;
     }
     if (report(f_open(&src, s, FA_READ)) != FR_OK)
@@ -566,13 +673,13 @@ static void command_copy(void)
         if (report(f_write(&dst, buf, l, &w)) != FR_OK)
             break;
         if (l != w) {
-            puts("Disk full.\n");
+            puts("Disk full.\r\n");
             break;
         }
     } while(l > 0);
     report(f_close(&dst));
     f_close(&src);
-    putchar('\n');
+    nl();
 }
 
 #define MAX_PATH 16
@@ -593,7 +700,7 @@ static void command_path(void)
         *dp++ = 0;
     }
     if (p)
-        puts("Too many paths.\n");
+        puts("Too many paths.\r\n");
     *pathp = NULL;
 }
 
@@ -631,38 +738,6 @@ static int internal_command(char *cmd, char *tail)
     }
     return 0;
 }                
-
-static int execute(char *head, char *tail)
-{
-#if 0
-    FIL fp;
-    FRESULT r;
-    struct exec exh;
-    struct mem *mem;
-    UINT s;
-
-    if (report(f_open(&fp, head, FA_READ)) != FR_OK)
-        return -1;
-    r = report(f_read(&fp, (void *)&exh, sizeof(exh), &s));
-    if (r != FR_OK || s != sizeof(exh) || !valid_header(&exh)) {
-        f_close(&fp);
-        return -1;
-    }
-    mem = allocate(&exh);
-    if (mem == NULL) {
-        f_close(&fp);
-        report(FR_NOT_ENOUGH_CORE);
-        return -1;
-    }
-    /* load binary into mem */
-    /* relocate */
-    /* and close up */
-    f_close(&fp);
-    launch(mem);
-#endif    
-    /* And done when it comes back to us */
-    return 0;
-}
 
 static char *find_program(char *p, int local)
 {
@@ -719,7 +794,7 @@ static void process_command(char *p)
     head = find_program(head, local);
     if (head && !execute(head, tail))
         return;
-    puts("Command not found.\n");
+    puts("Command not found.\r\n");
 }
     
 /*
@@ -731,9 +806,14 @@ void rommain(void)
 {
     char cmd[256];
     coninit();
-    puts("\010RC2014 68008 ROM v0.01\n\n");
+    puts("\010Welcome to RetroDOS/68K v0.01\r\n(C) Copyright 2020 Alan Cox\r\n");
+    puts("RetroDOS is free software under the terms of the GNU Public Licence version 2\r\n");
+    puts("This software is provided with NO WARRANTY and should not be used in safety\r\n");
+    puts("critical situations.\r\n\r\n");
+    platform_init();
+    mem_init();
     disk_init();
-    putchar('\n');
+    nl();
     while(1) {
         putchar('0' + curvol);
         puts("> ");

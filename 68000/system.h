@@ -2,6 +2,10 @@
  *	System to platform interface
  */
 
+extern void platform_init(void);
+
+/* Disk layer */
+
 struct disk {
     DRESULT (*read)(struct disk *d, BYTE *buff, LBA_t sector, UINT count);
     DRESULT (*write)(struct disk *d, const BYTE *buff, LBA_t sector, UINT count);
@@ -24,6 +28,30 @@ extern void disk_mediachange(struct disk *d);
 
 extern void disk_probe(void);
 
+#define MAXDISK	16
+
+/*
+ *	Memory
+ */
+
+struct mem {
+    uint8_t *mem_base;
+    uint32_t mem_size;
+};
+
+extern void mem_probe(struct mem *mem);
+
+/*
+ *	Executables
+ */
+
+struct exec {
+    uint32_t magic;
+#define EXEC_MAGIC 0x68A55A00
+    uint32_t load_size;
+    uint32_t bss_size;
+};
+
 /*
  *	Console
  */
@@ -34,6 +62,7 @@ extern int constat(void);
 extern int conostat(void);
 extern void coninit(void);
 
+extern void nl(void);
 extern int puts(const char *s);
 extern int puthexbyte(uint8_t n);
 extern int puthexword(uint16_t n);

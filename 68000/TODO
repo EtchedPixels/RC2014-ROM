@@ -1,0 +1,55 @@
+Minimal
+
+-	Exception reporting (address, bus etc)
+-	Sync ioctl
+-	Device size report from identify
+-	Aux and printer
+-	Bootable media support
+-	strcasecmp for internal commands
+
+Ideally
+
+-	Trap# hooks via RAM
+-	Some kind of autostart binary file
+-	Reboot and Halt calls (ensure disks stable) + commands
+-	Raw disk I/O interface
+-	Quart driver
+-	RTC or timer
+-	^C support
+-	Pattern support in bultins etc
+-	ROM disk
+-	BASIC (?)
+-	CP/M 80 emulator
+-	Sozobon C retarget and ideally native
+-	Diskchange command
+
+Longer Term
+
+-	Floppy disks
+-	Proper partition handling
+-	Media change
+-	Some kind of autoexec support
+-	Command editing and history
+-	Port configuration (baud etc)
+-	Fdisk and partition rescanning
+-	68010 support
+-	CP/M 68K emulator ?
+-	Exception forwarding/debugger
+
+Need some commands as well
+
+attrib
+chkdsk
+date
+debug
+deltree?
+echo
+editor
+fdisk
+format
+more
+mem
+verify (?) [by drive]
+vol
+
+(see what we can use from freedos for the hard ones)

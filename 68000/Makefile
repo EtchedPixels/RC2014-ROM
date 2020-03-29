@@ -17,8 +17,10 @@ rom.o: rom.S
 libgcc.o: libgcc.S
 	$(CC) -m68000 -c libgcc.S
 
-ff.o : ff.h ffconf.h
+ff.o : ff.h ffconf.h diskio.h
 
 clean:
 	rm -f rom.map rom.bin rom rom.elf *.o *~
 
+main.o : setjmp.h system.h ff.h ffconf.h diskio.h
+platform-rc2014.o : system.h ff.h ffconf.h diskio.h

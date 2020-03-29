@@ -5,7 +5,6 @@
 
 #include "ff.h"
 #include "diskio.h"
-#include "config.h"
 #include "system.h"
 
 volatile uint8_t *io = (uint8_t *)0x10000;
@@ -18,8 +17,6 @@ int getchar(void)
 
 int putchar(int c)
 {
-    if (c == '\n')
-        putchar('\r');
     while(!(io[0xC5] & 0x20));
     io[0xC0] = c;
     return 0;
@@ -39,10 +36,25 @@ int conostat(void)
     return 0x00;
 }
 
+/* Called very early to set up the console. We did this in the early
+   boot ROM asm so all is good */
+
 void coninit(void)
 {
 }
 
+/*
+ *	Memory interface. Use the memory between the end of the ROM working
+ *	space and top for programs. As we put the system stack at the very
+ *	top allow 2K for that.
+ */
+
+void mem_probe(struct mem *mem)
+{
+    extern uint8_t _end[];
+    mem->mem_base = _end;
+    mem->mem_size = (uint8_t *)0x100000 - mem->mem_base - 0x800;
+}
 /*
  *	CF interface
  */
@@ -211,7 +223,7 @@ static void cf_disk_probe(struct disk *d)
     for (i = 0; i < 512; i++)
         *bp++ = io[IDE_REG_DATA];
     if (!(buf[99] & 0x02)) {
-        puts("LBA not supported.\n");
+        puts("LBA not supported.\r\n");
         return;
     }
     bp = buf + 0x36;		/* Ident string */
@@ -221,11 +233,11 @@ static void cf_disk_probe(struct disk *d)
         bp += 2;
     }
     /* Now look for volumes : TODO */
-    putchar('\n');
+    nl();
     disk_register(d);
     return;
 fail:
-    puts("No drive present.\n");
+    puts("No drive present.\r\n");
     return;
 }
 
@@ -259,4 +271,9 @@ void disk_probe(void)
     cf_disk_probe(&cfdisk0);
     puts("cf1: ");
     cf_disk_probe(&cfdisk1);
+}
+
+void platform_init(void)
+{
+    puts("Platform: RC2014/68008 v0.01\r\n\r\n");
 }
