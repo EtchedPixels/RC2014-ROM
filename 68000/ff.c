@@ -616,7 +616,8 @@ static WORD ld_word (const BYTE* ptr)	/*	 Load a 2-byte little-endian word */
 	return rv;
 }
 
-static DWORD ld_dword (const BYTE* ptr)	/* Load a 4-byte little-endian word */
+/* volatile is workaround for a gcc over-optimization bug */
+static DWORD ld_dword (const volatile BYTE* ptr)	/* Load a 4-byte little-endian word */
 {
 	DWORD rv;
 
