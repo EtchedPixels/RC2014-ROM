@@ -5,7 +5,7 @@
 
 .mri 1
 
-	long $100000			; Top
+	long $FFE00			; Top except for work/boot buffer
 	long start
 	long trapbus
 	long trapaddr
