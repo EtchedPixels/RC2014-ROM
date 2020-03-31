@@ -10,10 +10,10 @@ start:
 	.byte	0		; X = P = 0, IRQ off
 
 	ldi	#0xFF
-	phi	6
+	phi	14
 	ldi	#0x80
-	plo	6
-	str	6		; Lights
+	plo	14
+	str	14		; Lights
 
 	;
 	;	R3 will become our program counter
@@ -60,25 +60,91 @@ setup:
 
 	sex	2
 
-	ldi	#0xFF
-	phi	6
-	ldi	#0x80
-	plo	6
 	ldi	#0xC0
-	str	6		; Lights
+	str	14		; Lights
 
 	; call iosetup(uarttab)
 	sep	4
 	.word	iosetup
 	.word	uarttab	
-loop:
 	sep	4
 	.word	print
-	.ascii	"Hello World"
+	.ascii	"1802 ROM Boot 0.01"
+	.byte	13,10
+	.ascii	"Initializing CF Adapter"
+	.byte	13,10
 	.byte	0
 
-	br loop
+	sep	4
+	.word	waitready
 
+	ldi	#0x16
+	plo	14
+	ldi	#0xE0
+	str	14
+
+	sep	4
+	.word	waitready
+	sep	4
+	.word	print
+	.ascii	"Loading..."
+	.byte 	0
+	sep	4
+	.word	iosetup
+	.word	ide1
+	sep	4
+	.word	waitready
+	sep	4
+	.word	iosetup
+	.word	ide2
+	sep	4
+	.word	waitdrq
+
+	ldi	#0x10
+	plo	14
+	ldi	#0x80
+	phi	13
+	ldi	#0x00
+	plo	13
+	plo	12
+diskget:
+	ldn	14		; IDE data
+	str	13
+	inc	13
+	ldn	14		; IDE data
+	str	13
+	inc	13
+	dec	12
+	glo	12
+	bnz	diskget
+
+	sep	4
+	.word	print
+	.ascii	"OK"
+	.byte	13,10,0
+
+	lbr	0x8000
+
+waitready:
+	ldi	#>hex40
+	phi	8
+	ldi	#<hex40
+waitfor:
+	plo	8
+	ldi	#0x17
+	plo	14
+	sex	8
+waitready_loop:
+	ldn	14
+	and
+	bz waitready_loop
+	sep	5
+	
+waitdrq:
+	ldi	#>hex08
+	phi	8
+	ldi	#<hex08
+	br	waitfor
 
 ;
 ;	Read byte pairs from a table until a \0 terminator and use those
@@ -158,7 +224,7 @@ call:				; as we are really a co-routine...
 	sex	4		; X = PC
 	ret			; interrupts back on
 	.byte	0x24
-	br	callagain	; round the co-routine
+	lbr	callagain	; round the co-routine
 
 returnagain:
 	sep	3		; back to old code
@@ -188,8 +254,12 @@ inittab:
 	.word	0xFEFF		; Stack at memory top
 	.word	call
 	.word	return
+hex40:
+	.byte	0x40
 hex20:
 	.byte	0x20		; For and on uart
+hex08:
+	.byte	0x08
 uarttab:
 	.byte	0xC3
 	.byte	0x80
@@ -203,4 +273,22 @@ uarttab:
 	.byte	0x02		; RTS
 	.byte	0xC2
 	.byte	0x87		; FIFO on, reset FIFO
+	.byte	0x00
+ide1:
+	.byte	0x11
+	.byte	0x01
+	.byte	0x17
+	.byte	0xEF
+	.byte	0x00
+ide2:
+	.byte	0x13
+	.byte	0x00
+	.byte	0x14
+	.byte	0x00
+	.byte	0x15
+	.byte	0x00
+	.byte	0x12
+	.byte	0x01
+	.byte	0x17
+	.byte	0x20
 	.byte	0x00
