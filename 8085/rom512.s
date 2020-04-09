@@ -69,7 +69,7 @@ go:
 	mvi a,2			! Put the ACIA back in normal state
 	out 0xA0
 	mvi a,ACIA_RTS_LOW	! Set up the lines
-	sta 0xA0
+	out 0xA0
 	mvi a,'R'		! Print the initial 'R'
 	out 0xA1
 	mvi b,1
