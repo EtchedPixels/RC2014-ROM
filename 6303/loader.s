@@ -19,6 +19,7 @@ start:
 	STAA $FE7B
 	; Our map is now 32 33 34 35
 
+	LDS #$01FF	; Stack out of the way
 	LDX #$0400
 
 	LDAA #$01	; 0 is the partition/boot block
@@ -58,7 +59,7 @@ bytes:
 	BRA dread
 
 load_done:
-	LDD $C000	; FIXME: move this
+	LDD $0400		; check signature
 	CMPA #$03
 	BNE bad_load
 	CMPB #$63
@@ -66,7 +67,7 @@ load_done:
 
 	LDX #running
 	BSR outstring
-	JMP $C002	; FIXME: move this
+	JMP $0402		; jump to byte following
 
 bad_load:
 	LDX #badimg
