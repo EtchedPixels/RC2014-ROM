@@ -7,7 +7,7 @@
 #include "diskio.h"
 #include "system.h"
 
-volatile uint8_t *io = (uint8_t *)0x10000;
+static volatile uint8_t *io = (uint8_t *)0x10000;
 
 int getchar(void)
 {
@@ -277,3 +277,6 @@ void platform_init(void)
 {
     puts("Platform: RC2014/68008 v0.01\r\n\r\n");
 }
+
+/* The disk buffer pointer. In our case it's a hardcoded top of memory space */
+uint8_t *diskbuf = (uint8_t *)0xFFE00;

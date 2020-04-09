@@ -7,6 +7,7 @@ static FRESULT report(FRESULT f);
 extern uint32_t syscall(uint32_t *argp);
 
 typedef void (*exec_t)(uint8_t *, const char *, const char *, uint32_t (*)(uint32_t *));
+typedef void (*loader_t)(uint8_t, uint8_t *, unsigned int, uint32_t (*)(uint32_t *));
 
 /* C library helpers */
 
@@ -75,11 +76,11 @@ unsigned int strnlen(const char *t, unsigned int n)
 
 unsigned int strlcpy(char *dst, const char *src, unsigned int dstsize)
 {
-  unsigned int len = strnlen(src, dstsize);
-  unsigned int cp = len >= dstsize ? dstsize - 1 : len;
-  memcpy(dst, src, cp);
-  dst[cp] = 0;
-  return len;
+    unsigned int len = strnlen(src, dstsize);
+    unsigned int cp = len >= dstsize ? dstsize - 1 : len;
+    memcpy(dst, src, cp);
+    dst[cp] = 0;
+    return len;
 }
 
 unsigned int strlcat(char *dst, const char *src, unsigned int dstsize)
@@ -283,16 +284,16 @@ DSTATUS disk_initialize(BYTE drive)
 
 //PARTITION VolToPart[FF_VOLUMES];
 
-static void disk_boot(int drive)
+static void disk_boot(uint8_t drive)
 {
-    uint8_t buf[512];
-    if (disk_read(drive, buf, 0, 1) != RES_OK)
+    if (disk_read(drive, diskbuf, 0, 1) != RES_OK)
         return;
-    if (memcmp(buf, "RETRODOSBOOT64", 14))
+    if (memcmp(diskbuf, "RETRODOSBOOT64", 14))
         return;
     /* Bootable media: most syscalls are not usable at this point but
        some like the console are and are handy */
-    ((exec_t)buf)(buf, NULL, NULL, syscall);
+    ((loader_t)(diskbuf + 14))(drive, mem_sys.mem_base,
+                                    mem_sys.mem_size, syscall);
     /* If we get here the loader returned: we don't allow an exit but
        we do allow for it to return - eg to offer a boot menu including
        DOS from ROM */
@@ -654,7 +655,7 @@ static void command_dir(char *tail)
     }
 }
 
-static void output(char *p, unsigned int len)
+static void output(uint8_t *p, unsigned int len)
 {
     while(len--)
         putchar(*p++);
@@ -663,7 +664,6 @@ static void output(char *p, unsigned int len)
 static void command_type(void)
 {
     char *p;
-    char buf[512];
     FIL fp;
     UINT l;
 
@@ -675,9 +675,9 @@ static void command_type(void)
             continue;
 
         do {
-            if (report(f_read(&fp, buf, 512, &l)) != FR_OK)
+            if (report(f_read(&fp, diskbuf, 512, &l)) != FR_OK)
                 break;
-            output(buf, l);
+            output(diskbuf, l);
         } while(l > 0);
         f_close(&fp);
     }
@@ -687,7 +687,6 @@ static void command_type(void)
 static void command_copy(void)
 {
     char *s, *d;
-    char buf[512];
     FIL src,dst;
     UINT l, w;
 
@@ -705,9 +704,9 @@ static void command_copy(void)
     }
     
     do {
-        if (report(f_read(&src, buf, 512, &l)) != FR_OK)
+        if (report(f_read(&src, diskbuf, 512, &l)) != FR_OK)
             break;
-        if (report(f_write(&dst, buf, l, &w)) != FR_OK)
+        if (report(f_write(&dst, diskbuf, l, &w)) != FR_OK)
             break;
         if (l != w) {
             puts("Disk full.\r\n");

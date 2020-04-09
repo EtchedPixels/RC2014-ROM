@@ -11,7 +11,7 @@ Ideally
 -	Trap# hooks via RAM
 -	Some kind of autostart binary file
 -	Reboot and Halt calls (ensure disks stable) + commands
--	Raw disk I/O interface
+-	Raw disk I/O interface (also needs a 'volume to disk' translator call)
 -	Quart driver
 -	RTC or timer
 -	^C support

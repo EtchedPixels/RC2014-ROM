@@ -29,6 +29,8 @@ extern void disk_mediachange(struct disk *d);
 
 extern void disk_probe(void);
 
+extern uint8_t *diskbuf;
+
 #define MAXDISK	16
 
 /*

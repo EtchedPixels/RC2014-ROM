@@ -4,7 +4,7 @@ CC = m68k-linux-gnu-gcc
 LD = m68k-linux-gnu-ld
 OBJCOPY = m68k-linux-gnu-objcopy
 
-CFLAGS = -O2 -Wall -pedantic -fomit-frame-pointer -I.  -m68000 -fno-inline-small-functions
+CFLAGS = -Os -Wall -pedantic -fomit-frame-pointer -I.  -m68000
 
 rom: rom.o main.o ff.o platform-rc2014.o libgcc.o
 	$(LD) -M -T rom.ld rom.o main.o ff.o platform-rc2014.o libgcc.o -o rom.elf >rom.map
