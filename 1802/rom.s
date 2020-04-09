@@ -174,10 +174,6 @@ do_return:
 print:
 	ldi	#0xFF
 	phi	7
-	ldi	#<hex20
-	plo	8
-	ldi	#>hex20
-	phi	8
 	ldi	#0xFF
 	phi	14
 	ldi	#0x80
@@ -188,7 +184,7 @@ waitch:
 	ldn	7
 	str	14
 	sex	8
-	and
+	ani	#0x20
 	sex	6
 	bz waitch
 	ldi	#0xC0
@@ -256,8 +252,6 @@ inittab:
 	.word	return
 hex40:
 	.byte	0x40
-hex20:
-	.byte	0x20		; For and on uart
 hex08:
 	.byte	0x08
 uarttab:
