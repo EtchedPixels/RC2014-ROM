@@ -1403,16 +1403,16 @@ init_ram:
 		jr nz, not_512512
 		; Running with 512K/512K. This isn't really a useful config
 		; as we have ROMWBW but it's handy for testing stuff
+		xor a
+		ld (078h),a
 		ld a,021h
-		out (079),a
+		out (079h),a
 		inc a
 		out (07ah),a
 		inc a
 		out (07bh),a
-		inc a
-		out (07ch),a
 		ld a,01h
-		out (078h),a
+		out (07ch),a
 		ld a,02h
 		jr setsysbyte
 
