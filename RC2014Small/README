@@ -1,2 +1,131 @@
-This will become a boot ROM and CP/M for the Small RC2014 configuration
+Boot ROM, monitor and CP/M for more classic style systems
 
+This tree is intended to provide an alternative boot monitor and management
+to the one included with these systems today. The goals are
+
+- Fit happily into an 8K ROM
+- Support CP/M 3 and in a way that keeps the speed advantages
+- Use the fact the ROM can be banked in and out to maximise the TPA
+- Put the BIOS as far as possible in ROM so we have one CP/M for a lot of
+  systems
+- Support a lot more hardware
+	- 16550A serial, SIO and ACIA with autodetect
+	- CF adapter or PPIDE with autodetect
+	- TMS991A video and PS/2 keyboard for 'home computer' formats
+	  (again with autodetect)
+	- Eventually hopefully also 26C92 and QUART
+	- Have enough ROM space to also support SD card bit bang later on
+- Reduce the number of variants by having one ROM and CP/M for all combinations
+- Give the user sensible diagnostics. We print a first 'R' very early to help
+  debugging boards, and we print a message rather than bombing if the user has
+  paged RAM and forgot the extra link wire/80pin connector bits or if RAM is
+  busted
+- Can run without interrupts
+- Does not blow away the ROM services when you boot from disk
+
+Compared with SCM right now it is
+
+- Very untested
+- Very buggy
+- Does not support baud rate changing
+- Does not support the diagnostic LED card
+
+This is not yet intended to be used for anything real!
+
+
+SCM also uses space for things that probably can't be fitted in or don't realy
+make sense in the CP/M BIOS mindset.
+
+- Z80 assembler
+- Z80 disassembler
+- Single step
+- Register dump
+- Switching I/O device
+- Timers
+
+The API is also very different. This ROM tries to present a CP/M 3 BIOS
+interface to the world so has disk support. It also boots in a way that
+allows a booted OS to use the BIOS services.
+
+
+Commands
+
+B 			:		attempt a disk boot
+G XXXX			:		jump to address
+I XXXX			:		display an I/O port value
+O XXXX XX		:		write to an I/O port
+R XXXX			:		dump memory
+W XXXX XX		:		write a byte to memory
+X XXXX			:		load to XXXX via xmodem (not yet
+					completed)
+
+
+Works on emulator testing
+-------------------------
+16x50 UART and basic monitor commands
+ACIA and basic monitor commands
+SIO and basic monitor commands
+Detection of classic, 512K/512K, SC108 and SC114 systems
+Detection and reporting on non-working paging
+
+Untested/incomplete and is still being brought up
+-------------------------------------------------
+TMS9918A console with ADM3A emulation
+PS/2 keyboard interface
+Loading and running CP/M
+
+Things to do (other than debug)
+-------------------------------
+Jump vectors for call ROM function helpers so we can make that portable too
+(something like call ix ROM so we don't hit any CP/M registers and can just
+ save/restore IX nicely)
+Support booting the legacy CP/M image as well
+Probe for second 16550A at 0xA8 and assign as AUX
+Better IDE timeouts
+SC26C92/886C81/QUART support
+Final disk layout. Right now we use the 256x512 sector trick so that we
+have to do no maths on layout. Might be better to be ROMWBW compatible ?
+Maybe a separate load binary from a Fuzix fs helper ?
+
+Longer Term
+-----------
+See if we can also support Tom's SBC and Linc80 in the same image
+SD card bitbang
+Floppy disk
+Z80 DMA for CF ? (silly but easy to add)
+
+
+
+
+Memory Layout
+-------------
+0000-1FFF		ROM
+2000-7FFF		Unused (may be paged ROM or RAM)
+8000-FDFF		Only used by monitor (can be reused by OS)
+FE00-FEFF		Variables and support code
+FF00-FFFF		Function jumps and ROM paging stack
+
+The defined part of the variables area is
+
+FE00		jump to routine to page in ROM. Do not call from below
+		8000h or with the stack low. Only affects A.
+FE03		jump to routine to page out the ROM. Only affects A.
+FE06		call ROM routine in IX. No other registers affected. Not
+		re-entrant.
+FE09		BYTE (system type)
+		1	Classic
+		2	512/512 banked
+		108	SC108
+		114	SC114
+
+FE00/FE03 pairs must be balanced and do not nest. They may in fact merely
+toggle the ROM!
+
+FF00-FF5F	CP/M jump vectors from WBOOT unwards
+
+These must be called with the ROM paged in but the disk routines while page
+the ROM out and back in for I/O. SELDSK must be wrapped and DRVTBL must be
+provided solely by the BIOS with CP/M itself to keep the system generation
+happy (it looks at those tables itself)
+
+FF60-FFFF	Stack
