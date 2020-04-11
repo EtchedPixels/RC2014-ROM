@@ -112,11 +112,6 @@ FE00		jump to routine to page in ROM. Do not call from below
 FE03		jump to routine to page out the ROM. Only affects A.
 FE06		call ROM routine in IX. No other registers affected. Not
 		re-entrant.
-FE09		BYTE (system type)
-		1	Classic
-		2	512/512 banked
-		108	SC108
-		114	SC114
 
 FE00/FE03 pairs must be balanced and do not nest. They may in fact merely
 toggle the ROM!
