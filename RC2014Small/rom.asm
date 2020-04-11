@@ -1766,7 +1766,7 @@ ide_writesec:
 
 cf_writeb:
 		ld a,d
-		cp 8
+		cp 10h
 		ret nc		; Control port not present
 		add 8
 		ld c,a
@@ -2276,14 +2276,17 @@ setmem:
 
 boot:
 
-		ld hl,07E00h		; so we start at 8000h
-		ld (addr),hl
+		ld hl,07F00h		; so we start at 8100h
+		ld (addr),hl		; giving 8000-80FF for CPMLDR to use
 
 		ld c,2
 		call seldsk
 
 		ld bc,0
 		call settrk
+
+		ld bc,0
+		call setsec
 
 		ld b,010h		; plenty for CPMLDR
 
@@ -2302,18 +2305,18 @@ load_loop:
 
 		call read
 
+		or a
+		jr nz, read_fail
+
 		pop bc
 		djnz load_loop
 
-		ld hl,(08000h)
-		ld de,0c0deh
-		or a
-		sbc hl,de
-		jp z, 08002h		; into CPMLDR
+		jp 08100h		; into CPMLDR
 
+read_fail:
 		call strout
-		ascii "Not bootable."
-		defb 13,10,0
+		ascii "Disk error"
+		byte 0
 		jp monitornr
 
 ;
@@ -2608,38 +2611,6 @@ rom_end:
 ;
 
 		org 0fe00h
-		jmp romin
-		jmp romout
-		jmp romcall
-sysbyte:	db 0
-tmpsp:		dw 0
-tmpa:		db 0
-disksec:	dw 0
-disktrk:	dw 0
-diskdma:	dw 0
-diskdev:	db 0
-confunc:	dw 0
-auxfunc:	dw 0
-diskfunc:	dw 0
-addr:		dw 0
-vdpxy:		dw 0
-vdpcursor:	dw 0
-vdpsetxy:	db 0
-vdpcursch	db 0
-scrollbuf:	ds 40
-kbport:		dw 0
-kbsave:		db 0
-kbdelay:	dw 0
-keyshifted:	db 0
-keyup:		db 0
-keybreak:	db 0
-shift_down:	dw 0
-ps2char:	db 0
-ps2pend:	db 0
-abort_sp:	dw 0
-repeat:		dw 0
-inbuf:		ds 33		; including \0
-twidth:		db 0		; number of bytes for dump (not true width)
 
 ;
 ;	Block transfer routines. Having a tiny number of routines in
@@ -2647,6 +2618,12 @@ twidth:		db 0		; number of bytes for dump (not true width)
 ;	stashed in ROM by the build script.
 
 xfer_block:
+		; Function pointers
+		jmp romin
+		jmp romout
+		jmp romcall
+
+
 ;	These must be high as they bank flip. We also want them high
 ;	as we patch them (see the 512/512K set up code)
 romout:
@@ -2720,6 +2697,36 @@ cf_xfer_w:
 		otir
 		jr romin
 xfer_block_end:
+
+sysbyte:	db 0
+tmpsp:		dw 0
+tmpa:		db 0
+disksec:	dw 0
+disktrk:	dw 0
+diskdma:	dw 0
+diskdev:	db 0
+confunc:	dw 0
+auxfunc:	dw 0
+diskfunc:	dw 0
+addr:		dw 0
+vdpxy:		dw 0
+vdpcursor:	dw 0
+vdpsetxy:	db 0
+vdpcursch	db 0
+scrollbuf:	ds 40
+kbport:		dw 0
+kbsave:		db 0
+kbdelay:	dw 0
+keyshifted:	db 0
+keyup:		db 0
+keybreak:	db 0
+shift_down:	dw 0
+ps2char:	db 0
+ps2pend:	db 0
+abort_sp:	dw 0
+repeat:		dw 0
+inbuf:		ds 33		; including \0
+twidth:		db 0		; number of bytes for dump (not true width)
 
 ;
 ;	BIOS code is invoked with
