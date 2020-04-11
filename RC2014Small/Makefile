@@ -1,6 +1,9 @@
-rc2014.rom: rom.asm
+rc2014.rom: rom.asm romfix
 	zmac rom.asm
-	dd if=zout/rom.cim of=rom bs=8192 conv=sync count=1
+	./romfix <zout/rom.cim >rom
+
+romfix: romfix.c
+	gcc -Wall -pedantic -O2 romfix.c -o ./romfix
 
 cpm80.rom: system.asm
 	zmac system.asm

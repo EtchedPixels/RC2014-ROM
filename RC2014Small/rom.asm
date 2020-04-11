@@ -23,39 +23,40 @@
 ; Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.
 ;
 
+XMTIMER		equ	0000h		; cycles of constat before we give up
+					; reset each valid block
+ACK		equ	6
+EOT		equ	4
+NAK		equ	21
+SOH		equ	1
+
 		org 0
 
 rst0:
 		di
 		ld sp,0
 		jp start
-rst8:
+		nop
+rst8:				; print char in A, preserve BC-HL
+		push bc
+		push de
+		push hl
+		ld c,a
+		jr rst8con
 		nop
 		nop
-		nop
-		nop
-		nop
-		nop
-		nop
-		nop
-rst10:
-		nop
-		nop
-		nop
-		nop
-		nop
-		nop
-		nop
-		nop
-rst18:
-		nop
-		nop
-		nop
-		nop
-		nop
-		nop
-		nop
-		nop
+rst10:				; get a char in A, preserve BC-HL
+		push bc
+		push de
+		push hl
+		call conin
+		jr poppers
+rst18:				; test for input ready, preserve BC-HL
+		push bc		; on return A = 255 for yes, 0 for no
+		push de
+		push hl
+		call const
+		jr poppers
 rst20:
 		nop
 		nop
@@ -85,8 +86,25 @@ rst30:
 		nop
 rst38:
 		reti
+rst8con:
+		call conout
+poppers:
+		pop hl
+		pop de
+		pop bc
+		ret
 
 start:
+		; Start by tring to do UART detection without writing to
+		; RAM. Get a first letter out any way we can so the user
+		; has diagnostics
+		;
+		;
+		; We may have to slip in some very early platform detection
+		; to also support Tom's SBC and the Linc80
+		;
+
+		;
 		; ACIA detection: TX ready will be 1. Reset will force TX
 		; ready to 0. If that fails it's not an ACIA
 		in a,(0a0h)
@@ -194,7 +212,7 @@ ns16x50in:
 		ret
 ns16x50poll:
 		in a,(0a5h)
-		and 2
+		and 1
 		ret
 ns16x50opoll:
 		in a,(0a5h)
@@ -202,7 +220,13 @@ ns16x50opoll:
 		ret
 
 not_16x50:
+		; TODO: Add SC26C92 and QUART detection ?
 		; Guess we have an SIO ?
+
+		; If we wanted to support Tom's SBC as well we would need
+		; to check for an SIO and check how it is mapped as Tom's
+		; SBC has DA DB CA CB whilst RC2014 is CA DA CB DB
+
 		ld bc,0A80h		; 10 bytes port 80
 		ld hl,sio_setup		; load, aim
 		otir			; fire
@@ -299,8 +323,8 @@ conin2:
 coninw:		call jphl
 		or a
 		jr z,coninw
-		ld l,(ix)
-		ld h,(ix + 1)
+		ld l,(ix + 2)
+		ld h,(ix + 3)
 		pop ix
 		jp (hl)
 
@@ -1071,6 +1095,8 @@ tmsifont:
 		ld (auxfunc),hl
 		ld hl,tmsfunc
 		ld (confunc),hl
+		ld a,8
+		ld (twidth),a	; default to 8 bytes hex dumps (40 cols)
 		ret
 
 tmsfunc:
@@ -1359,39 +1385,235 @@ vdphidec:
 
 
 init_ram:
+		; We may not have any writable RAM just yet
+		; The cases are
+		; RC2014 classic - RAM is high and writeable
+		; SC108 - RAM high and writeable
+		; SC114 - RAM high and writeable
+		; 512K/512K - low 16K ROM mapped everywhere
+
+		; On entry HL DE and A hold things we need
+
+
+		ex af,af'		; save uart info in AF'
+		ld ix,08000h
+		ld a,(ix)
+		inc (ix)
+		cp (ix)
+		jr nz, not_512512
+		; Running with 512K/512K. This isn't really a useful config
+		; as we have ROMWBW but it's handy for testing stuff
+		ld a,021h
+		out (079),a
+		inc a
+		out (07ah),a
+		inc a
+		out (07bh),a
+		inc a
+		out (07ch),a
+		ld a,01h
+		out (078h),a
+		ld a,02h
+		jr setsysbyte
+
+		; This code is moved to RAM and run there, must stay
+		; position independent.
+		;
+		; NZ - classic
+		; Z -  if reg C != 0 then SC series else no paging
+is_classic:
+		xor a
+		out (38h),a	; Only on the classic will this make
+		ld hl,0		; low memory RAM
+		ld a,(hl)
+		inc (hl)
+		cp (hl)		; Z set if RAM not writable
+		ld a,0		; preserve flags
+		out (38h),a	; Back to ROM (all cases)
+		ret nz		; 0 = classic
+		; Now double check it's not just broken
+		inc a
+		out (38h),a	; On the SC series RAM is now low
+		ld a,(hl)
+		inc (hl)
+		sub (hl)
+		ld c,a		; will be 0 for paging fail
+		xor a
+		out (38h),a	; ROM back in (all cases)
+		ret		; Z - not a classic, check C
+
+		; Back to code run from ROM
+not_512512:
+		; Three possibilities (unless we add Tom's SBC to the mix!)
+		; (we don't support Grants original)
+		;
+		; RC2014 - ROM on/off toggles on 038h, only 64K RAM
+		; SC108 - ROM on/off is 038h bit 0 RAM A16 is 038h bit 7
+		; SC114 - ROM on/off is 038h bit 0 RAM A16 is 038h bit 0
+		;
+		; We should also check for non working, non-fitted paged
+		; RAM as it seems a common problem.
+		;
+		; We do however know that RAM is present high in all these
+		; cases already
+		;
+		exx
+		ld hl,is_classic
+		ld de,scrollbuf		; good a place as any
+		ld bc,040h
+		ldir
+		call scrollbuf
+		ld a,01h
+		jr nz, exsetsysbyte	; Was a classic
+
+		ld a,c			; Check if just a busted page setup
+		or a
+
+		ld a,255
+		jr z, exsetsysbyte	; Fail (we can't just print here)
+
+		; ROM didn't toggle out or page out on 38h bit 0, and it's
+		; not a 512K system. This means it's either a broken paging
+		; set up (usually user forgot the extra link) or it's a
+		; non paging set up for BASIC. Either way not suppported
+
+
+sc_series:
+		; Ok 108 or 114 ?
+		; We last wrote 00h so we are A16 low, ROM in
+		ld a,80h
+		out (38h),a
+		; On the SC108 we just toggled A16, on the SC114 nothing
+		ld hl, scrollbuf
+		ld (hl),a
+		xor a
+		out (38h),a		; A16 again on the SC108
+		ld (hl),a		; the two banks are now labelled
+					; 00h and 80h
+		ld a,80h
+		out (38h),a		; A16 back high
+		cp (hl)			; Was A16 toggling ?
+		ld a,114
+		jr nz, exsetsysbyte	; If no we are an SC114
+		; SC108 - put the RAM back right
+		xor a
+		out (38h),a
+		ld a,108
+exsetsysbyte
+		exx
+setsysbyte:
+		ld (sysbyte),a
 		; TODO - keyboards
 		ld (confunc),hl
 		ld (auxfunc),de
+
+		inc a
+		jr nz, has_paging
+
+		call strout
+		ascii "C2014 with no paging. Not supported"
+		defb 13,10,0
+		di
+		halt
+
+has_paging:
+		; default to 16 byte wide monitor displaysa
+		ld a,16
+		ld (twidth),a
+
 		call tmsprobe
-		push af
 		call strout
 		ascii "C2014 8K Boot ROM v0.01"
 		defb 13,10,13,10,0
+
+		ld a,(sysbyte)
+		cp 1
+		jr nz,notclassic
+		call strout
+		ascii "RC2014 Classic"
+		defb 0
+		jr showuart
+notclassic:
+		cp 2
+		jr nz,not512bank
+		call strout
+		ascii "RC2014 512K/512K Banked"
+		defb 0
+		jr showuart
+not512bank:
+		push af
+		call strout
+		ascii "Small Computer Central "
+		defb 0
 		pop af
+		cp 108
+		jr nz, is_sc114
+		call strout
+		ascii "SC108"
+		defb 0
+		jr showuart
+is_sc114
+		call strout
+		ascii "SC114"
+		defb 0
+showuart:
+		call strout
+		ascii " detected."
+		defb 13,10
+		ascii "Console UART: "
+		defb 0
+
+		ex af,af'	; recover the uart info bits
 		; Do it this way so if we probe all and do fancier stuff
 		; we can switch to a chain of bit tests
 		dec a
 		jr nz, notacia
 		call strout
 		ascii "ACIA at 0xA0"
-		byte 0
+		defb 0
 		jr diskprobe
 notacia:	dec a
 		jr nz, not16x50
 		call strout
 		ascii "16x50 at 0xA0"
-		byte 0
+		defb 0
 		jr diskprobe
 not16x50:
 		call strout
 		ascii "SIO at 0x80"
-		byte 0
+		defb 0
 
 
 		; Now go figure out what disk interfaces are present
 diskprobe:
 		call strout
-		byte 13,10,0
+		defb 13,10,0
+		;
+		; Move the disk I/O helpers into place
+		;
+		ld hl,xfer_buf
+		ld de,xfer_block
+		ld bc,xfer_block_end - xfer_block
+		ldir
+
+		;
+		; Patch the disk helpers
+		;
+		ld a,(sysbyte)
+		cp 2
+		jr nz, not512
+		; Change the port to use
+		ld a,078h
+		ld (romout + 3),a
+		ld (romin + 3),a
+		; And the register value for ROM out (020h) - ROM in is
+		; still 0
+		ld a,020h
+		ld (romout + 3),a
+not512:
+		;
+		; Look for PPIDE
+		;
 		ld a,09Bh
 		out (023h),a
 		in a,(023h)
@@ -1573,9 +1795,7 @@ ppide_writeb:
 cf_readsec:
 		ex de,hl
 		ld bc,010h	; 256 bytes from 10h - twice
-		inir
-		inir
-		ret		
+		jp cf_xfer_r
 		
 ppide_readsec:
 		ex de,hl
@@ -1583,27 +1803,12 @@ ppide_readsec:
 		out (022h),a	; Register
 
 		ld b,0		; 256 words
-ppide_readloop:
-		ld a,048h	; Data Register | RD
-		out (022h),a	;
-		in a,(020h)	; Data
-		ld (hl),a
-		inc hl
-		in  a,(021h)	; Data
-		ld (hl),a
-		inc hl
-		ld a,08h	; RD goes back high
-		out (022h),a
-		djnz ppide_readloop
-
-		ret
+		jp ppide_xfer_r
 
 cf_writesec:
 		ex de,hl
 		ld bc,010h	; 256 bytes to 10h - twice
-		otir
-		otir
-		ret		
+		jp cf_xfer_w
 
 ppide_writesec:
 		ex de,hl
@@ -1613,18 +1818,8 @@ ppide_writesec:
 		out (022h),a	; Register
 
 		ld b,0		; 256 words
-ppide_writeloop:
-		ld a,(hl)
-		out (020h),a	; Data
-		inc hl
-		ld a,(hl)
-		out (021h),a	; Data
-		inc hl
-		ld a,028h	; Data Register | WR
-		out (022h),a	;
-		ld a,08h
-		out (022h),a	; WR goes back high
-		djnz ppide_writeloop
+
+		call ppide_xfer_w
 
 		ld a,092h
 		out(023h),a	; Turn the 82C55 back to reading
@@ -1780,11 +1975,307 @@ devtbl:
 		ld hl, 0		; no device table for now
 		ret
 
+;
+;	Monitor helpers
+;
+
+;
+;	Turn an input byte into a hex value 0-15. C set means invalid
+;
+hexchhl:
+		ld a,(hl)
+hexch:
+		sub '0'
+		ret c			; not valid
+		cp 10
+		ccf
+		ret nc			; valid
+		sub 7			; gap between 0-9 and A-F
+		ret c			; in gap so bad
+		cp 16			; check range
+		ccf
+		ret
+
+;
+;	Accumulate a hex number
+;	Returns a number in DE and C counting the digits input
+;
+;	Uses A C DE HL, but callers save state for us
+;
+hexnum:
+		ld c,0
+		ld d,c
+		ld e,c
+skipspc:
+		ld a,(hl)
+		cp 32
+		jr nz, nexnl
+		inc hl
+		jr skipspc
+nexnl:
+		call hexchhl
+		ret c
+		sla e
+		rl d
+		sla e
+		rl d
+		sla e
+		rl d
+		sla e
+		rl d
+		or e
+		ld e,a
+		inc c
+		inc hl
+		jr nexnl
+
+;
+;	Load up to 4 hex digits into BC, preserve A,DE, HL is input pointer
+;	Set C on error. Allowed to trash HL, DE, BC on error
+;
+hexin:
+		push af
+		push de
+		call hexnum
+		ld a,c
+		or a
+		jr z,badhex
+		cp 5
+		jr nc, badhex
+		ld c,e
+		ld b,d
+		pop de
+		pop af
+		or a
+		ret
+badhex:
+		; Error path can eat HL
+		call strout
+		ascii "Bad hex"
+		defb 0
+		pop de
+		pop af
+		scf
+		ret
+;
+;	Load a single hex pair into E, preserve A, BC, HL is input pointer
+;
+;	On an error we can trash BC DE HL and we use this fact to call
+;	badhex and pop bc into de
+;
+hexin1:
+		push af
+		push bc
+		call hexnum
+		ld a,c
+		or a
+		jr z, badhex
+		cp 3
+		jr nc, badhex
+		pop bc
+		pop af
+		or a
+		ret
+
+phexa:
+		push af
+		rra
+		rra
+		rra
+		rra
+		call phexc
+		pop af
+phexc:		and 15
+		add 48
+		cp '9'+1
+		jr c,hdigit
+		add 7
+hdigit:		ld c,a
+		jp conout
+
+phexas:
+		call phexa
+		ld c,' '
+		jp conout
+;
+;	Print an address and spacer. BC is the address
+;	Preserve BC DE HL
+;
+hexout2addr:
+		push hl
+		push de
+		push bc
+		ld a,b
+		call phexa
+		pop bc
+		ld a,c
+		push bc
+		call phexa
+		call strout
+		ascii " : "
+		defb 0
+		pop bc
+		pop de
+		pop hl
+		ret
+;
+;	Read a line of input.
+
+input:
+		ld c,0
+		ld hl,inbuf
+inputloop:
+		rst 10h			; conin
+		cp 10
+		jr z, inputnl
+		cp 13
+		jr z, inputnl
+		cp 8
+		jr z, inputdel
+		cp 127
+		jr z, inputdel
+		jr nc, inputloop
+		cp 32
+		jr c, inputloop
+		bit 5,c			; end of buffer ?
+		jr nz, inputloop
+		cp 'a'
+		jr c, notlc
+		cp 'z'+1
+		jr nc, notlc
+		and 223			; turn upper case
+notlc:		ld (hl),a
+		rst 8			; echo the typing
+		inc hl
+		inc c
+		jr inputloop
+inputdel:
+		ld a,c
+		or a
+		jr z,inputloop
+		push hl
+		push bc
+		call strout
+		defb 8, 32, 8, 0
+		pop bc
+		pop hl
+		dec c
+		dec hl
+		jr inputloop
+inputnl:
+		ld (hl),0
+		call strout
+		defb 13,10,0
+		ret
+;
+;
+;	Monitor
+;
 now_boot:
 		ld hl,functions
-		ld de,0ff80h
+		ld de,0ff00h
 		ld bc,0080h
 		ldir
+
+monitornr:
+		ld hl, monitor
+		ld (repeat),hl
+monitor:
+		push bc			; for repeats
+		push de
+		call strout
+		defb 13,10
+		ascii "---*"
+		defb 0
+		call input
+		pop de
+		pop bc
+		ld hl, inbuf
+		ld a,(hl)
+		inc hl
+		or a
+		jr z, repeatcmd
+		cp 'B'
+		jp z, boot
+		cp 'G'
+		jr z, goto
+		cp 'I'
+		jr z, inport
+		cp 'O'
+		jr z, outport
+		cp 'R'
+		jr z, dumpmem
+		cp 'W'
+		jr z, setmem
+		cp 'X'
+		jp z, xmodem
+badcmd:
+		call strout
+		ascii "?"
+		defb 0
+		jr monitor
+repeatcmd:
+		ld hl,(repeat)
+		jp (hl)
+goto:
+		call hexin		; preserves A, sets BC
+		jr c, badcmd
+		ld h,b
+		ld l,c
+		call callhl
+		jr monitornr
+
+callhl:		jp (hl)
+
+inport:
+		call hexin		; preserves A, sets BC
+		jr c, badcmd
+		ld hl,inport_r
+		ld (repeat),hl
+inport_r:
+		call hexout2addr
+		in a,(c)
+		call phexa
+		jr monitornr
+
+outport:
+		call hexin		; preserves A, sets BC
+		jr c, badcmd
+		call hexin1		; into E
+		jr c, badcmd
+		out (c),e
+		jr monitornr
+
+dumpmem:
+		call hexin		; preserves A, sets BC
+		jr c, badcmd
+dumpmem_r:
+		ld a,(twidth)
+		ld e,a
+		ld hl, dumpmem_r
+		ld (repeat),hl
+		call hexout2addr	; print "BC : "
+dumpl:
+		ld a,(bc)
+		push bc
+		push de
+		call phexas		; print "A "
+		pop de
+		pop bc
+		inc bc
+		dec e
+		jr nz, dumpl
+		jp monitor
+setmem:
+		call hexin
+		jr c, badcmd
+		call hexin1
+		jr c, badcmd
+		ld a,e
+		ld (bc),a
+		jp monitornr
+
+boot:
 
 		ld hl,07E00h		; so we start at 8000h
 		ld (addr),hl
@@ -1824,10 +2315,139 @@ load_loop:
 		call strout
 		ascii "Not bootable."
 		defb 13,10,0
+		jp monitornr
 
-		di
-		halt
+;
+;	XMODEM helper
+;
 
+
+
+xmodem:
+		call hexin
+		jp c,badcmd
+		ld h,b
+		ld l,c
+		call strout
+		ascii "Transfer begins..."
+		defb 13,10,0
+
+		ld de,XMTIMER	; nak/timeout counter
+		ld c,1		; expected packet
+
+		;
+		; Xmodem load into (HL)
+		;
+		; HL = pointer
+		; DE = timeout counter
+		; C = block
+		; B is scratch
+		;
+xmnext:
+		call xmhead
+		;  Timed out waiting for valid header
+		jr c, xmtimeout
+		; Got an EOT
+		jr z, xmdone
+
+		; We got a header in time but is it valid. Caller did SOH
+		; and inverse check. Returned block id is in A
+
+		cp c
+		jr z, validframe
+		dec a
+		cp c
+		jr nz, xmnext
+
+		; We got an old frame
+		push hl
+		ld hl, 0		; ROM (discard)
+		call xmdata
+sendack:
+		ld a,ACK
+		rst 8			; Send an ACK to force it to move on
+		pop hl			; Get data pointer back
+		jr xmnext
+validframe:
+		push hl
+		call xmdata
+		jr c, xmnext		; data timeout, go back to look for
+					; headers
+		jr z,newack		; hey its the right one!
+		; Wrong checksum
+		pop hl			; recover data pointer
+		dec c			; Undo advance of a block
+		ld a,NAK
+		rst 8
+		jr xmnext
+newack:
+		inc c
+		inc sp
+		inc sp			; discard old saved data pointer
+		ld a,ACK
+		rst 8
+		ld de, XMTIMER
+		jr xmnext
+
+xmtimeout:
+		call strout
+		byte 13,10,13,10
+		ascii "*** Timeout"
+		byte 0
+xmdone:
+		jp monitornr
+
+xmdata:
+		ld b,128
+		ld c,0
+xmdl:
+		call chint
+		ret c
+		ld (hl),a
+		inc hl
+		add c
+		ld c,a
+		djnz xmdl
+		rst 10h
+		sub c
+		ret
+xmhead:
+		call chint
+		ret c
+		; Special case - an EOT as first thing after a block
+		cp EOT
+		ret z
+		cp SOH
+		jr z, xmhead2
+xmheadl:	call chint
+		ret c
+		cp SOH
+		jr nz, xmheadl
+xmhead2:	call chint
+		ret c
+		ld b,a			; block
+		call chint		; inverse block
+		ret c
+		add b			; 255 if valid
+		inc a
+		jr nz, xmheadl		; Not a valid header
+		; Header is good - return block id in A
+		ld a,b
+		ret
+
+chint:		; Read a character with timeouts
+		dec de
+		ld a,d
+		or e
+		scf
+		ret z
+		rst 18h
+		or a
+		jr z, chint
+		; Read the byte
+		rst 10h
+		or a		; Clear C
+		ret
 
 		; We will add more CP/M alike helpers as we go
 
@@ -1978,8 +2598,12 @@ tmsfontdata:
 		defb 000h,000h,020h,054h,008h,000h,000h,000h
 		defb 000h,000h,000h,000h,000h,000h,000h,000h
 
+		; We fix these up in the build script.
+xfer_buf:
+		ds xfer_block_end - xfer_block
 
 
+rom_end:
 ;
 ;	ROM variables
 ;
@@ -1987,6 +2611,7 @@ tmsfontdata:
 		org 0fe00h
 tmpsp:		dw 0
 tmpa:		db 0
+sysbyte:	db 0
 disksec:	dw 0
 disktrk:	dw 0
 diskdma:	dw 0
@@ -2010,6 +2635,71 @@ shift_down:	dw 0
 ps2char:	db 0
 ps2pend:	db 0
 abort_sp:	dw 0
+repeat:		dw 0
+inbuf:		ds 33		; including \0
+twidth:		db 0		; number of bytes for dump (not true width)
+
+;
+;	Block transfer routines. Having a tiny number of routines in
+;	high memory is smaller and faster than bounce buffers. These are
+;	stashed in ROM by the build script.
+
+xfer_block:
+;	These must be high as they bank flip. We also want them high
+;	as we patch them (see the 512/512K set up code)
+romout:
+		ld a,1
+		out (038h),a
+		ret
+romin:
+		ld a,0
+		out (038h),a
+		ret
+
+ppide_xfer_r:
+		call romout
+ppide_readloop:
+		ld a,048h	; Data Register | RD
+		out (022h),a	;
+		in a,(020h)	; Data
+		ld (hl),a
+		inc hl
+		in  a,(021h)	; Data
+		ld (hl),a
+		inc hl
+		ld a,08h	; RD goes back high
+		out (022h),a
+		djnz ppide_readloop
+		jr romin
+
+ppide_xfer_w:
+		call romout
+ppide_writeloop:
+		ld a,(hl)
+		out (020h),a	; Data
+		inc hl
+		ld a,(hl)
+		out (021h),a	; Data
+		inc hl
+		ld a,028h	; Data Register | WR
+		out (022h),a	;
+		ld a,08h
+		out (022h),a	; WR goes back high
+		djnz ppide_writeloop
+		jr romin
+
+cf_xfer_r:
+		call romout
+		inir
+		inir
+		jr romin
+
+cf_xfer_w:
+		call romout
+		otir
+		otir
+		jr romin
+xfer_block_end:
 
 ;
 ;	BIOS code is invoked with
