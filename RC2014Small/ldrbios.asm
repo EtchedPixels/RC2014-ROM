@@ -16,6 +16,9 @@
 ;	We run with the ROM mapped. As we don't use low space nothing
 ;	will mind and the CP/M BIOS init will fix up the low mapping
 ;
+romin		equ	0FE00h
+romout		equ	0FE03h
+romcall		equ	0FE06h
 rom_wboot	equ	0FF00h
 rom_const	equ	0FF00h+3
 rom_conin	equ	0FF00h+6
@@ -55,19 +58,19 @@ rom_userf	equ	0FF00h+87
 wboote:     jp bad          ; warm start
             jp bad	    ; console status
             jp bad          ; console character in
-            jp rom_conout   ; console character out
+            jp conout       ; console character out
             jp bad          ; list character out
             jp bad          ; punch character out
             jp bad          ; reader character out
-            jp rom_home     ; move disk head to home position
+            jp home         ; move disk head to home position
             jp seldsk	    ; select disk
-            jp rom_settrk   ; set track number
-            jp rom_setsec   ; set sector number
-            jp rom_setdma   ; set DMA address
-            jp rom_read     ; read disk
+            jp settrk       ; set track number
+            jp setsec       ; set sector number
+            jp setdma       ; set DMA address
+            jp read         ; read disk
             jp bad          ; write disk
             jp bad          ; return list status
-            jp rom_sectran  ; sector translate
+            jp sectran      ; sector translate
             jp bad	    ; console output ready
             jp bad	    ; aux input is ready
             jp bad	    ; aux output is ready
@@ -76,7 +79,7 @@ wboote:     jp bad          ; warm start
             jp bad 	    ; drive table
             jp bad 	    ; multi block I/O
             jp bad	    ; flush data to disc
-            jp rom_move	    ; block move (including banking)
+            jp move	    ; block move (including banking)
             jp bad	    ; get current data and time into SCB
             jp bad	    ; select memory bank. Special: preserve regs
             jp bad	    ; set the bank for the next read/write sector
@@ -150,17 +153,50 @@ dpblk:
 ; bios functions follow
 
 boot:
+	    call romout
 	    ld hl, bootstr
-            call strout
-	    ret
+            jp strout
 bad:
             ld hl, ouchithurts
             call strout
+	    di
+	    halt
 
 seldsk:
-	    call rom_seldsk
-            ret nc
+	    ld c,2	    ; As the ROM sees it we boot off C:
+	    ld ix,rom_seldsk
+	    call romcall
+	    ld hl,0
+            ld a,c
+	    or a
+	    ret z
 	    ld hl,dpbase0
+	    ret
+conout:
+	    ld ix,rom_conout
+	    jp romcall
+home:
+	    ld ix,rom_home
+	    jp romcall
+settrk:
+	    ld ix,rom_settrk
+	    jp romcall
+setsec:
+	    ld ix,rom_setsec
+	    jp romcall
+setdma:
+	    ld ix,rom_setdma
+	    jp romcall
+sectran:
+	    ld ix,rom_sectran
+	    jp romcall
+read:
+	    ld ix,rom_read
+	    jp romcall
+move:
+	    ex de,hl
+	    ldir
+	    ex de,hl
 	    ret
 
 wefailed:   jp wefailed
@@ -172,7 +208,8 @@ strout:     ; print string pointed to by HL
             ret z
             ld c, a
 	    push hl
-            call rom_conout
+	    ld ix,rom_conout
+            call romcall
 	    pop hl
             inc hl
             jp strout
