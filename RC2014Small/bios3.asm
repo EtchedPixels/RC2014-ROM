@@ -45,6 +45,9 @@ cdisk          equ 0004h   ; current disk number, 0=a, 1=b ... 15=p
 ; apparently also current user number is in here (in the top 4 bits?)
 iobyte         equ 0003h   ; intel "standard" i/o byte (legacy)
 
+romin		equ	0FE00h
+romout		equ	0FE03h
+romcall		equ	0FE06h
 rom_wboot	equ	0FF00h
 rom_const	equ	0FF00h+3
 rom_conin	equ	0FF00h+6
@@ -283,9 +286,9 @@ boot:
 
 	; Kick out the ROM if we didn't do so already
 patchonce:
-	out (38h),a
-	ld hl,0
-	ld (patchonce),hl	; nop it out for any cold restart
+	call romout
+	ld a,01h		; turn it into a harmless BC load
+	ld (patchonce),a	; nop it out for any cold restart
         jp gocpm
 
 wboot:    
@@ -360,69 +363,45 @@ noccp:	db 'CCP.COM not found',10,13,0
 badccp:	db 'CCP.COM read failed',10,13,0
 
 const:
-	ld (tmpsp),sp
-	ld sp,0
-	out (38),a
-	call rom_const
-	out (38),a
-	ld sp,(tmpsp)
+	push ix
+	ld ix,rom_const
+dorom:
+	call romcall
+	pop ix
 	ret
 conin:
-	ld (tmpsp),sp
-	ld sp,0
-	out (38),a
-	call rom_conin
-	out (38),a
-	ld sp,(tmpsp)
-	ret
+	push ix
+	ld ix,rom_conin
+	jr dorom
 conout:
-	ld (tmpsp),sp
-	ld sp,0
-	out (38),a
-	call rom_conout
-	out (38),a
-	ld sp,(tmpsp)
-	ret
+	push ix
+	ld ix,rom_conout
+	jr dorom
 list:
-	ld (tmpsp),sp
-	ld sp,0
-	out (38),a
-	call rom_list
-	out (38),a
-	ld sp,(tmpsp)
-	ret
+	push ix
+	ld ix,rom_list
+	jr dorom
 auxout:
-	ld (tmpsp),sp
-	ld sp,0
-	out (38),a
-	call rom_auxout
-	out (38),a
-	ld sp,(tmpsp)
-	ret
+	push ix
+	ld ix,rom_auxout
+	jr dorom
 auxin:
-	ld (tmpsp),sp
-	ld sp,0
-	out (38),a
-	call rom_auxin
-	out (38),a
-	ld sp,(tmpsp)
-	ret
+	push ix
+	ld ix,rom_auxin
+	jr dorom
 home:
-	ld (tmpsp),sp
-	ld sp,0
-	out (38),a
-	call rom_home
-	out (38),a
-	ld sp,(tmpsp)
-	ret
+	push ix
+	ld ix,rom_home
+	jr dorom
 seldsk:
-	ld (tmpsp),sp
-	ld sp,0
-	out (38),a
-	call rom_seldsk
-	out (38),a
-	ld sp,(tmpsp)
-	ret nc		; failed
+	push ix
+	ld ix,rom_seldsk
+	call romcall
+	pop ix
+	ld hl,0
+	xor a
+	cp b
+	ret z		; failed
 	; We own the table lookup. ROM preserves C
 	ld hl,dphtab
 	ld b,0
@@ -434,101 +413,53 @@ seldsk:
 	ld l,a
 	ret
 settrk:
-	ld (tmpsp),sp
-	ld sp,0
-	out (38),a
-	call rom_settrk
-	out (38),a
-	ld sp,(tmpsp)
-	ret
+	push ix
+	ld ix,rom_settrk
+	jr dorom
 setsec:
-	ld (tmpsp),sp
-	ld sp,0
-	out (38),a
-	call rom_setsec
-	out (38),a
-	ld sp,(tmpsp)
-	ret
+	push ix
+	ld ix,rom_setsec
+	jr dorom
 setdma:
-	ld (tmpsp),sp
-	ld sp,0
-	out (38),a
-	call rom_setdma
-	out (38),a
-	ld sp,(tmpsp)
-	ret
+	push ix
+	ld ix,rom_setdma
+	jr dorom
 read:
-	ld (tmpsp),sp
-	ld sp,0
-	out (38),a
-	call rom_read
-	out (38),a
-	ld sp,(tmpsp)
-	ret
+	push ix
+	ld ix,rom_read
+	jr dorom
 write:
-	ld (tmpsp),sp
-	ld sp,0
-	out (38),a
-	call rom_write
-	out (38),a
-	ld sp,(tmpsp)
-	ret
+	push ix
+	ld ix,rom_write
+	jr dorom
 listst:
-	ld (tmpsp),sp
-	ld sp,0
-	out (38),a
-	call rom_listst
-	out (38),a
-	ld sp,(tmpsp)
-	ret
+	push ix
+	ld ix,rom_listst
+	jr dorom
 sectran:
-	ld (tmpsp),sp
-	ld sp,0
-	out (38),a
-	call rom_sectran
-	out (38),a
-	ld sp,(tmpsp)
-	ret
+	push ix
+	ld ix,rom_sectran
+	jr dorom
 conost:
-	ld (tmpsp),sp
-	ld sp,0
-	out (38),a
-	call rom_conost
-	out (38),a
-	ld sp,(tmpsp)
-	ret
+	push ix
+	ld ix,rom_conost
+	jr dorom
 auxist:
-	ld (tmpsp),sp
-	ld sp,0
-	out (38),a
-	call rom_auxist
-	out (38),a
-	ld sp,(tmpsp)
-	ret
+	push ix
+	ld ix,rom_auxist
+	jr dorom
 auxost:
-	ld (tmpsp),sp
-	ld sp,0
-	out (38),a
-	call rom_auxost
-	out (38),a
-	ld sp,(tmpsp)
-	ret
+	push ix
+	ld ix,rom_auxost
+	jr dorom
 devtbl:
-	ld (tmpsp),sp
-	ld sp,0
-	out (38),a
-	call rom_devtbl
-	out (38),a
-	ld sp,(tmpsp)
-	ret
+	push ix
+	ld ix,rom_devtbl
+	jr dorom
 devini:
-	ld (tmpsp),sp
-	ld sp,0
-	out (38),a
-	call rom_devini
-	out (38),a
-	ld sp,(tmpsp)
-	ret
+	push ix
+	ld ix,rom_devini
+	jr dorom
 ;
 ;	Has to be in the BIOS or GENCPM loses its marbles
 ;
@@ -536,33 +467,22 @@ drvtbl:
 	ld hl,dphtab
 	ret
 multio:
-	ld (tmpsp),sp
-	ld sp,0
-	out (38),a
-	call rom_multio
-	out (38),a
-	ld sp,(tmpsp)
-	ret
+	push ix
+	ld ix,rom_multio
+	jr dorom
 flush:
-	ld (tmpsp),sp
-	ld sp,0
-	out (38),a
-	call rom_flush
-	out (38),a
-	ld sp,(tmpsp)
-	ret
+	push ix
+	ld ix,rom_flush
+	jr dorom
 move:
 	ex de,hl
 	ldir
 	ex de,hl
 	ret
 time:
-	ld (tmpsp),sp
-	ld sp,0
-	out (38),a
-	call rom_time
-	out (38),a
-	ld sp,(tmpsp)
+	push ix
+	ld ix,rom_time
+	jr dorom
 selmem:
 setbnk:
 xmove:
