@@ -6,7 +6,7 @@
 ;
 ;	ZMAC BIOS3.ASM
 ;	ZMAC SCB.ASM
-;	LINK BNKBIOS3[B]=BIOS3,SCB
+;	LINK BIOS3[B]=BIOS3,SCB
 ;	GENCPM
 ;
 	extrn SCBBASE
@@ -273,8 +273,8 @@ BAUD_19200   equ	15
 
 ; bios functions follow
 boot:
-	ld sp, 0		; use the BIOS and ROM scratch stack
-	xor a
+	ld sp, 08000h		; Well clear of anything during set up
+	xor a			
         ld (iobyte), a
 	ld a,2			; Default to C:
         ld (cdisk), a
@@ -285,10 +285,6 @@ boot:
         ei
 
 	; Kick out the ROM if we didn't do so already
-patchonce:
-	call romout
-	ld a,01h		; turn it into a harmless BC load
-	ld (patchonce),a	; nop it out for any cold restart
         jp gocpm
 
 wboot:    
@@ -350,7 +346,7 @@ ccpok:
         ld c, a         ; send to ccp
         jp 0100h        ; and we're off!
 
-ccpfcb:	db 1
+ccpfcb:	db 3
 	db 'CCP     COM'
 ccpext:	db 0,0,0
 ccprc:	db 0
@@ -365,10 +361,7 @@ badccp:	db 'CCP.COM read failed',10,13,0
 const:
 	push ix
 	ld ix,rom_const
-dorom:
-	call romcall
-	pop ix
-	ret
+	jr dorom
 conin:
 	push ix
 	ld ix,rom_conin
@@ -431,7 +424,10 @@ read:
 write:
 	push ix
 	ld ix,rom_write
-	jr dorom
+dorom:
+	call romcall
+	pop ix
+	ret
 listst:
 	push ix
 	ld ix,rom_listst
@@ -545,7 +541,7 @@ outcharhex: ; print byte in A as two-char hex value
 
 bootmsg:
 	db 10, 13
-	db 'RC2014 8085 CP/M 3.x Banked BIOS 0.03'
+	db 'RC2014 CP/M 3.x BIOS 0.01'
 	db 10,13
 	db '(C) Alan Cox 2019-2020'
 	db 10,13,10,13,0
