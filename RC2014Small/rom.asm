@@ -147,7 +147,7 @@ aciain:
 		ret
 aciapoll:
 		in a,(0a0h)
-		and 080h
+		and 01h
 		ret
 aciaopoll:
 		in a,(0a0h)
@@ -379,6 +379,7 @@ stroutl:
 		call jpde
 		inc hl
 		jr stroutl
+jpix:		byte 0ddh
 jphl:
 strout_done:	jp (hl)
 jpde:
@@ -715,7 +716,7 @@ keymap:
 		defb 0, 0, 0, 0, 0, 'Q', '!', 0
 		defb 0, 0, 'Z', 'S', 'A', 'W', '"', 0
 		; E0 20h
-		defb 0, 'C', 'X', 'D', 'E', '$', 0, 0
+		defb 0, 'C', 'X';, 'D', 'E', '$', 0, 0
 		defb 0, 0, 'V', 'F', 'T', 'R', '%', 0
 		; E0 30h
 		defb 0, 'N', 'B', 'H', 'G', 'Y', '^', 0
@@ -1352,7 +1353,6 @@ txtout:
 		ld de,23		; Line 23, col 0
 notover:	ld (vdpxy),de
 vdpdone:
-		; TODO cursor
 vdpshowc:	ld de,(vdpxy)
 		ld (vdpcursor),de
 		ld b,0
@@ -1503,7 +1503,6 @@ exsetsysbyte
 		exx
 setsysbyte:
 		ld (sysbyte),a
-		; TODO - keyboards
 		ld (confunc),hl
 		ld (auxfunc),de
 
@@ -1710,7 +1709,6 @@ cfdiskfunc:
 ide_writeb_wr:
 		call ide_writeb
 
-		; TODO: timeouts and review BUSY handling
 ide_wait_ready:
 		ld de,2000h
 ide_waitr:
@@ -1896,10 +1894,11 @@ setdma:
 		ld (diskdma),bc
 		ret
 seldsk:
-		ld hl,0
+		ld b,0		; So the caller knows if it worked
 		ld a,c
 		cp 10		; AB - floppies, CDEF - disk 0 GHIJ - disk 1
 		ret nc
+		inc b		; worked
 		ld (diskdev),a
 		ret		; NC = error, C = ok
 				; caller BIOS owns DPH to keep GENCPM happy
@@ -2609,9 +2608,12 @@ rom_end:
 ;
 
 		org 0fe00h
+		jmp romin
+		jmp romout
+		jmp romcall
+sysbyte:	db 0
 tmpsp:		dw 0
 tmpa:		db 0
-sysbyte:	db 0
 disksec:	dw 0
 disktrk:	dw 0
 diskdma:	dw 0
@@ -2654,6 +2656,24 @@ romout:
 romin:
 		ld a,0
 		out (038h),a
+		ret
+
+;
+;	Call function in IX in ROM. Does stack switches and all the needed
+;	work. Preserves all registers into and out of the call. Not
+;	re-entrant
+;
+romcall:
+		ld (tmpsp),sp
+		ld (tmpa),a
+		ld sp,0
+		call romin
+		ld a,(tmpa)
+		call jpix
+		ld (tmpa),a
+		call romout
+		ld sp,(tmpsp)
+		ld a,(tmpa)
 		ret
 
 ppide_xfer_r:
