@@ -191,3 +191,6 @@ The rest of the system can be built on CP/M. To build on a CP/M 3 system do
 	GENCPM
 	(and use the defaults from the GENCPM.DAT in this distribution)
 
+Thie CPMLDR.COM should be written to sectors 1+ of the boot disk. The
+CPM3.SYS file should be copied to the boot drive CP/M volume.
+
