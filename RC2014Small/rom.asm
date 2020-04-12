@@ -1039,7 +1039,6 @@ tmshi:
 		out (99h),a
 		ld a,040h
 		out (99h),a
-		ld hl,tmsfontdata
 
 		ld bc,4096
 cleartms:
@@ -1049,7 +1048,7 @@ cleartms:
 		or c
 		jr nz, cleartms
 
-		ld hl,tmsfont
+		ld hl,tmsfontdata
 		xor a
 		out (99h),a
 		ld a,51h	; base for char 32
@@ -1063,7 +1062,7 @@ tmsfont:
 		or c
 		jr nz, tmsfont
 
-		ld hl,tmsfont
+		ld hl,tmsfontdata
 		xor a
 		out (99h),a
 		ld a,55h	; base for char 160
