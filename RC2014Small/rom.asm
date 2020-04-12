@@ -23,7 +23,7 @@
 ; Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.
 ;
 
-VERSION		equ	0002h
+VERSION		equ	0003h
 
 
 XMTIMER		equ	0000h		; cycles of constat before we give up
@@ -164,7 +164,7 @@ not_acia:
 		in a,(0a3h)
 		ld e,a
 		or 080h
-		ld l,a
+		ld c,a
 		out (0a3h),a
 		in a,(0a1h)
 		ld d,a
@@ -172,15 +172,15 @@ not_acia:
 		out (0a1h),a
 		in a,(0a1h)
 		cp 0aah
-		jr nz, not_16x50
+		jp nz, not_16x50
 		ld a,e
 		out (0a3h),a
 		in a,(0a1h)
 		cp 0aah
-		jr z, not_16x50
+		jp z, not_16x50
 		; Switch to the baud rable, set it to 3 (38400), then switch
 		; back set up 8N1, RTS low and reset the FIFO if present
-		ld a,l
+		ld a,c
 		out (0a3h),a
 		xor a
 		out (0a1h),a
@@ -194,8 +194,44 @@ not_acia:
 		ld a,'R'
 		out (0a0h),a
 		ld hl,ns16x50func
-		; FIXME: check for a 16C2552
-		ld de,noauxfunc
+		ld de, noauxfunc
+
+		; Same again for 0a8h (seems to be cheaper to duplicate than
+		; mess with modifying c a lot)
+		in a,(0abh)
+		ld e,a
+		or 080h
+		ld c,a
+		out (0abh),a
+		in a,(0a9h)
+		ld d,a
+		ld a,0aah
+		out (0a9h),a
+		in a,(0a9h)
+		cp 0aah
+		ld a,2
+		jp nz, init_ram
+		ld a,e
+		out (0abh),a
+		in a,(0a9h)
+		cp 0aah
+		ld a,2
+		jp z, init_ram
+		; Switch to the baud rable, set it to 3 (38400), then switch
+		; back set up 8N1, RTS low and reset the FIFO if present
+		ld a,c
+		out (0abh),a
+		xor a
+		out (0a9h),a
+		ld a,3
+		out (0a8h),a
+		out (0abh),a
+		dec a
+		out (0ach),a
+		ld a,087h
+		out (0aah),a
+
+		ld de,ns16x50altfunc
 		ld a,2
 		jp init_ram
 
@@ -217,7 +253,28 @@ ns16x50poll:
 		ret
 ns16x50opoll:
 		in a,(0a5h)
-		and 80
+		and 20h
+		ret
+
+ns16x50altfunc:
+		defw ns16x50altout
+		defw ns16x50altin
+		defw ns16x50altpoll
+		defw ns16x50altopoll
+
+ns16x50altout:
+		out (0a8h),a
+		ret
+ns16x50altin:
+		in a,(0a8h)
+		ret
+ns16x50altpoll:
+		in a,(0adh)
+		and 1
+		ret
+ns16x50altopoll:
+		in a,(0adh)
+		and 20h
 		ret
 
 not_16x50:
@@ -1528,7 +1585,7 @@ has_paging:
 
 		call tmsprobe
 		rst 20h
-		ascii "C2014 8K Boot ROM v0.02"
+		ascii "C2014 8K Boot ROM v0.03"
 		defb 13,10,13,10,0
 
 		ld a,(sysbyte)

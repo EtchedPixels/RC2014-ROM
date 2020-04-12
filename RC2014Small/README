@@ -50,7 +50,7 @@ TPA.
 
 Commands
 
-B 			:		attempt a disk boot
+B d			:		attempt a disk boot
 G XXXX			:		jump to address
 I XXXX			:		display an I/O port value
 O XXXX XX		:		write to an I/O port
@@ -59,6 +59,8 @@ W XXXX XX		:		write a byte to memory
 X XXXX			:		load to XXXX via xmodem (not yet
 					completed)
 
+[Note CP/M right now only supports booting off drive C as ldrbios has not
+ been updated]
 
 Works on emulator testing
 -------------------------
@@ -68,6 +70,7 @@ SIO and basic monitor commands
 Detection of classic, 512K/512K, SC108 and SC114 systems
 Detection and reporting on non-working paging
 Loading and running CP/M
+Loading and running legacy CP/M 2.2 images
 
 Untested/incomplete and is still being brought up
 -------------------------------------------------
@@ -78,11 +81,10 @@ XModem
 Things to do (other than debug)
 -------------------------------
 Probe for second 16550A at 0xA8 and assign as AUX
-Support booting the legacy CP/M image as well
-Pass boot drive number to loader so we can support "B C:" for example
 SC26C92/886C81/QUART support
 Final disk layout. Right now we use the 256x512 sector trick so that we
 have to do no maths on layout. Might be better to be ROMWBW compatible ?
+(no - ROMWBW layout is horrible and limiting, better to go to partitions too)
 Maybe a separate load binary from a Fuzix fs helper ?
 RTC support
 
