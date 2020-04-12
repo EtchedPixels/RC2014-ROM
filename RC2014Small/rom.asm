@@ -23,6 +23,9 @@
 ; Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.
 ;
 
+VERSION		equ	0002h
+
+
 XMTIMER		equ	0000h		; cycles of constat before we give up
 					; reset each valid block
 ACK		equ	6
@@ -58,9 +61,7 @@ rst18:				; test for input ready, preserve BC-HL
 		call const
 		jr poppers
 rst20:
-		nop
-		nop
-		nop
+		jp strout
 		nop
 		nop
 		nop
@@ -367,11 +368,15 @@ auxost:
 		ld ix,(auxfunc)
 		jr conost2
 
-strout:		ld hl,(confunc)
+strout:		
+		push hl
+		ld hl,(confunc)
 		ld e,(hl)
 		inc hl
 		ld d,(hl)
 		pop hl
+		ex (sp),hl
+		push bc
 stroutl:
 		ld a,(hl)
 		or a
@@ -379,9 +384,9 @@ stroutl:
 		call jpde
 		inc hl
 		jr stroutl
-jpix:		byte 0ddh
-jphl:
-strout_done:	jp (hl)
+strout_done:	pop bc
+		ex (sp),hl
+		ret
 jpde:
 		push de
 		ret
@@ -478,7 +483,7 @@ ps2byte:
 		; F0 is the keyup code
 		cp 0f0h
 		jr z, setkeyup
-		; If it was not  prefix tyr and decode it
+		; If it was not a prefix try and decode it
 		call keycode
 		; As we got a non shift all the shifting flags are now
 		; reset
@@ -1424,6 +1429,8 @@ is_classic:
 		xor a
 		out (38h),a	; Only on the classic will this make
 		ld hl,0		; low memory RAM
+		ld a,1
+	        ld (3),a	; Hack to fix iobyte bug on legacy CP/M 2.2
 		ld a,(hl)
 		inc (hl)
 		cp (hl)		; Z set if RAM not writable
@@ -1508,7 +1515,7 @@ setsysbyte:
 		inc a
 		jr nz, has_paging
 
-		call strout
+		rst 20h
 		ascii "C2014 with no paging. Not supported"
 		defb 13,10,0
 		di
@@ -1520,42 +1527,42 @@ has_paging:
 		ld (twidth),a
 
 		call tmsprobe
-		call strout
-		ascii "C2014 8K Boot ROM v0.01"
+		rst 20h
+		ascii "C2014 8K Boot ROM v0.02"
 		defb 13,10,13,10,0
 
 		ld a,(sysbyte)
 		cp 1
 		jr nz,notclassic
-		call strout
+		rst 20h
 		ascii "RC2014 Classic"
 		defb 0
 		jr showuart
 notclassic:
 		cp 2
 		jr nz,not512bank
-		call strout
+		rst 20h
 		ascii "RC2014 512K/512K Banked"
 		defb 0
 		jr showuart
 not512bank:
 		push af
-		call strout
+		rst 20h
 		ascii "Small Computer Central "
 		defb 0
 		pop af
 		cp 108
 		jr nz, is_sc114
-		call strout
+		rst 20h
 		ascii "SC108"
 		defb 0
 		jr showuart
 is_sc114
-		call strout
+		rst 20h
 		ascii "SC114"
 		defb 0
 showuart:
-		call strout
+		rst 20h
 		ascii " detected."
 		defb 13,10
 		ascii "Console UART: "
@@ -1566,25 +1573,25 @@ showuart:
 		; we can switch to a chain of bit tests
 		dec a
 		jr nz, notacia
-		call strout
+		rst 20h
 		ascii "ACIA at 0xA0"
 		defb 0
 		jr diskprobe
 notacia:	dec a
 		jr nz, not16x50
-		call strout
+		rst 20h
 		ascii "16x50 at 0xA0"
 		defb 0
 		jr diskprobe
 not16x50:
-		call strout
+		rst 20h
 		ascii "SIO at 0x80"
 		defb 0
 
 
 		; Now go figure out what disk interfaces are present
 diskprobe:
-		call strout
+		rst 20h
 		defb 13,10,0
 		;
 		; Move the disk I/O helpers into place
@@ -1626,7 +1633,7 @@ not512:
 
 		; Ok PPIDE present it seems
 
-		call strout
+		rst 20h
 		ascii "PPIDE interface found at 0x20"
 		defb 13,10,0
 
@@ -1690,7 +1697,7 @@ not_ppide:
 		ld de,0fefh
 		call ide_writeb_wr
 
-		call strout
+		rst 20h
 		ascii "Trying CF interface at 0x10"
 		defb 13,10,0
 
@@ -1846,12 +1853,12 @@ ppide_readb:
 ;
 ;
 ;   Block addressed
-;   00000000 000000DD TTTTTTTT SSSSSSSS
+;   00000000 0000000D TTTTTTTT SSSSSSSS
 ;
 ;
 ide_setlba:
 		ld a,(diskdev)
-		cp 6
+		cp 4			; C D are drive 0 E F drive 1
 		ld e,0e0h
 		jr c, disk0
 		ld e,0f0h
@@ -1860,8 +1867,8 @@ disk0:
 		call ide_writeb_wr
 		ret nz
 		ld a,(diskdev)
-		sub 2			; floppies
-		and 3			; 4 per disk
+		; sub 2			; floppies (doesn't affect and..)
+		and 1			; 2 per disk
 		ld d,0dh		; LBA 2 is volume
 		ld e,a
 		call ide_writeb
@@ -1895,7 +1902,7 @@ setdma:
 seldsk:
 		ld b,0		; So the caller knows if it worked
 		ld a,c
-		cp 10		; AB - floppies, CDEF - disk 0 GHIJ - disk 1
+		cp 6		; AB - floppies, CD - disk 0 EF - disk 1
 		ret nc
 		inc b		; worked
 		ld (diskdev),a
@@ -1908,7 +1915,7 @@ read:
 		ld a,(diskdev)
 ;		cp 2
 ;		jr c, floprd
-		cp 10
+		cp 6
 		jr nc, failed
 		call ide_setlba		; sets LBA, drive and count 1
 		jr nz, failed
@@ -1935,7 +1942,7 @@ write:
 		ld a,(diskdev)
 ;		cp 2
 ;		jr c, flopwr
-		cp 10
+		cp 6
 		jr nc, failed
 		call ide_setlba		; sets LBA, drive and count 1
 		jr nz, failed
@@ -1958,6 +1965,16 @@ sectran:
 		ret
 
 flush:
+		cp 2
+		jr c, noflush
+		call ide_setlba		; LBA will be ignored but drive
+					; will be right
+		jr nz, failed
+		ld de,0fe7h		; flush cache
+		call ide_writeb_wr
+		jr nz, failed
+noflush:
+		xor a			; it worked fine
 		ret
 
 multio:
@@ -2048,7 +2065,7 @@ hexin:
 		ret
 badhex:
 		; Error path can eat HL
-		call strout
+		rst 20h
 		ascii "Bad hex"
 		defb 0
 		pop de
@@ -2109,7 +2126,7 @@ hexout2addr:
 		ld a,c
 		push bc
 		call phexa
-		call strout
+		rst 20h
 		ascii " : "
 		defb 0
 		pop bc
@@ -2151,18 +2168,14 @@ inputdel:
 		ld a,c
 		or a
 		jr z,inputloop
-		push hl
-		push bc
-		call strout
+		rst 20h
 		defb 8, 32, 8, 0
-		pop bc
-		pop hl
 		dec c
 		dec hl
 		jr inputloop
 inputnl:
 		ld (hl),0
-		call strout
+		rst 20h
 		defb 13,10,0
 		ret
 ;
@@ -2181,7 +2194,7 @@ monitornr:
 monitor:
 		push bc			; for repeats
 		push de
-		call strout
+		rst 20h
 		defb 13,10
 		ascii "---*"
 		defb 0
@@ -2208,9 +2221,8 @@ monitor:
 		cp 'X'
 		jp z, xmodem
 badcmd:
-		call strout
-		ascii "?"
-		defb 0
+		ld a,'?'
+		rst 08h
 		jr monitor
 repeatcmd:
 		ld hl,(repeat)
@@ -2220,10 +2232,11 @@ goto:
 		jr c, badcmd
 		ld h,b
 		ld l,c
-		call callhl
+		call jphl
 		jr monitornr
 
-callhl:		jp (hl)
+jpix:		byte 0ddh
+jphl:		jp (hl)
 
 inport:
 		call hexin		; preserves A, sets BC
@@ -2273,21 +2286,43 @@ setmem:
 		ld (bc),a
 		jp monitornr
 
+baddisk:
+		rst 20h
+		ascii "Bad disk"
+		defb 0
+		jr badcmd
+
 boot:
+		ld a,(hl)
+		or a
+		jr nz, notbootdef
+		ld a,'C'
+notbootdef:
+		inc hl
+		cp ' '
+		jr z, boot
+		sub 'A'
+		jr c, baddisk
+		ld (bootdev),a
 
-		ld hl,07F00h		; so we start at 8100h
-		ld (addr),hl		; giving 8000-80FF for CPMLDR to use
+		ld hl,07e00h		; so we start at 8000h
+		ld (addr),hl
 
-		ld c,2
+		ld c,a
 		call seldsk
+		ld a,h
+		or l
+		jr z, baddisk
 
 		ld bc,0
 		call settrk
 
-		ld bc,0
+		ld bc,-1		; will wrap this before we use it
 		call setsec
 
-		ld b,010h		; plenty for CPMLDR
+		ld b,018h		; 24 sectors so that if we booted
+					; a legacy Searle CP/M we can
+					; save the universe.
 
 load_loop:
 		push bc
@@ -2310,12 +2345,58 @@ load_loop:
 		pop bc
 		djnz load_loop
 
-		jp 08100h		; into CPMLDR
+		; CPMLDR always start with a JP and we can make any other
+		; loader do the same
+		; The Searle legacy CP/M will follow that by another JP
+		; and then 127,0, "Copyright" so we can spot a raw CP/M 2.2
+		; for RC2014
+
+		ld a,(08000h)
+		cp 0c3h
+		jr nz, notsearle
+		ld a,(08006h)
+		cp 127
+		jr nz, notsearle
+		ld a,(08007h)
+		or a
+
+		; Did we in fact load a legacy Grant Searle style CP/M 2.2
+		; in which case we definitely don't want to jump to 8100h!
+
+		; The Searle loader loads 24 sectors at 0d000h and expects
+		; to jump through fffe
+
+		jr nz, notsearle
+
+		; Always using port A for now
+		ld hl, 08000h
+		ld de, 0d000h
+		ld bc, 03000h
+		ldir
+		ld sp, 08100h		; so we don't trash anything
+		jp 0e600h		; skip the broken iobyte setup
+
+notsearle:
+		; We loaded sector 0 which we didn't need at 08000-81ff
+		; Pass interesting data to the loader
+		ld a,(08200h)
+		cp 031h
+		jr nz, notbootable
+		ld hl,8200h
+		ld de,(sysbyte)
+		ld bc,VERSION
+		jp 08200h		; into CPMLDR or whatever
+
+notbootable:
+		rst 20h
+		ascii "Not bootable"
+		defb 0
+		jp monitornr
 
 read_fail:
-		call strout
+		rst 20h
 		ascii "Disk error"
-		byte 0
+		defb 0
 		jp monitornr
 
 ;
@@ -2329,7 +2410,7 @@ xmodem:
 		jp c,badcmd
 		ld h,b
 		ld l,c
-		call strout
+		rst 20h
 		ascii "Transfer begins..."
 		defb 13,10,0
 
@@ -2391,7 +2472,7 @@ newack:
 		jr xmnext
 
 xmtimeout:
-		call strout
+		rst 20h
 		byte 13,10,13,10
 		ascii "*** Timeout"
 		byte 0
@@ -2442,9 +2523,16 @@ chint:		; Read a character with timeouts
 		or e
 		scf
 		ret z
+		push bc
+		ld b,8		; Inner delay counting loop so we penalize
+chintl:				; noise characters more than waiting
 		rst 18h
 		or a
-		jr z, chint
+		jr nz, chintgot
+		djnz chintl
+		jr chint
+chintgot:
+		pop bc
 		; Read the byte
 		rst 10h
 		or a		; Clear C
@@ -2698,6 +2786,7 @@ cf_xfer_w:
 xfer_block_end:
 
 sysbyte:	db 0
+bootdev:	db 0
 tmpsp:		dw 0
 tmpa:		db 0
 disksec:	dw 0
