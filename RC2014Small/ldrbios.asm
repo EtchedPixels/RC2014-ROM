@@ -6,7 +6,7 @@
 ;
 ; on CP/M
 ; zmac ldrbios.asm
-; link cpmldr[LXX00]=cpmldr,ldrbios
+; link cpmldr[L8200]=cpmldr,ldrbios
 ; Remembering it will use the 256 bytes below its load address for data
 ;
 
