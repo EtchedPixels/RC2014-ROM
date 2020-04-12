@@ -172,3 +172,22 @@ Only the 512K/512K systems support banked CP/M and they already have ROMWBW.
 
 No services via USERF are provided at this time.
 
+## Building
+
+To build the ROM check the tree out of github and type "make". The current
+set up is tested on Linux but ought to work on Mac systems, and hopefully as
+Windows now has some Linux emulation support there too. You will need the
+Unix zmac assembler. It would probably not be hard to make these buildable
+on CP/M. The main challenge will be the way one piece of code is built for
+one address and stored at another.
+
+The rest of the system can be built on CP/M. To build on a CP/M 3 system do
+
+	ZMAC LDRBIOS.ASM
+	LINK CPMLDR[L8200]=CPMLDR,LDRBIOS
+
+	ZMAC BIOS3.ASM
+	LINK BIOS3[B]=BIOS3,SCB
+	GENCPM
+	(and use the defaults from the GENCPM.DAT in this distribution)
+
