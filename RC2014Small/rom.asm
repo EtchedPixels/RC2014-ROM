@@ -2843,7 +2843,7 @@ cf_xfer_w:
 xfer_block_end:
 
 sysbyte:	db 0
-bootdev:	db 0
+bootdev:	db 0		; must follow sysbyte
 tmpsp:		dw 0
 tmpa:		db 0
 disksec:	dw 0
