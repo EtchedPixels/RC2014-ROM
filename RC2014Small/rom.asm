@@ -4,9 +4,9 @@
 ;	(C) 2019-2020 Alan Cox
 ;
 ;	Font
-;	Copyright (C) 1999, 2000, 2004 Michael Reinelt <michael@reinelt.co.at>
-;	Copyright (C) 2004 The LCD4Linux Team <lcd4linux-devel@users.sourceforge.net
-;	Slightly tweaked for Fuzix to put back a proper '~' symbol
+; Copyright (C) 1999, 2000, 2004 Michael Reinelt <michael@reinelt.co.at>
+; Copyright (C) 2004 The LCD4Linux Team <lcd4linux-devel@users.sourceforge.net
+; Slightly tweaked for Fuzix to put back a proper '~' symbol
 ;
 ; This ROM is free software; you can redistribute it and/or modify
 ; it under the terms of the GNU General Public License as published by
@@ -742,7 +742,7 @@ altmod:
 ;
 ;	Translate the main PS/2 keys into something that kind of goes
 ;	with the ADM 3A emulation. We could map more keys like function keys
-;	as non ascii codes if we wanted.
+;	as non ascii; codes if we wanted.
 ;
 ;	UK keymap
 ;
@@ -869,11 +869,11 @@ kbdone:
 		ld hl,0ffffh
 kbout:
 		ld a,(kbsave)
-		; B is now zero - make it non zero so we can use high ports with
-		; Z180
+		; B is now zero - make it non zero so we can use high ports
+		; with Z180
 		inc b
 		or 2
-		out (c),a		; put the clock back down, don't pull data
+		out (c),a	; put the clock back down, don't pull data
 		ret
 
 ;
@@ -898,7 +898,8 @@ nextbit:
 		;	jr nc, kbdbad
 		ld a,e
 		or a		; Generate parity flag
-		ld h,080h	; For even parity of the 8bits send a 1 to get odd
+		ld h,080h	; For even parity of the 8bits send a 1
+				; to get odd
 		jp pe, kbdevenpar
 		ld h,0		; If we are odd parity send a 0 so we stay odd
 kbdevenpar:
@@ -977,7 +978,7 @@ kbdput:
 		and 0feh		; Pull clock low
 		or 2			; Keep data floating
 		out (c),a		; Clock low, data floating
-		; 100uS delay		- actually right now the 125uS poll delay
+		; 100uS delay - actually right now the 125uS poll delay
 clkwait:
 		djnz clkwait
 		ld a,(kbsave)
@@ -1036,9 +1037,9 @@ waitk:
 		jp kbdata
 
 		;
-		; Send a bit to the keyboard. The PS/2 keyboard provides the clock
-		; so we wait for the clock, then send a bit, then wait for the other
-		; clock edge.
+		; Send a bit to the keyboard. The PS/2 keyboard provides the
+		; clock - so we wait for the clock, then send a bit, then wait
+		; for the other clock edge.
 		;
 kbdoutbit:
 		exx
@@ -1250,7 +1251,7 @@ up_0:
 		dec c
 		ld hl, scrollbuf
 		ld b,40
-up_1
+up_1:
 		outi
 		jp nz, up_1		; 26 clock loop
 		pop bc
@@ -1348,7 +1349,7 @@ lfandfs:
 		inc e
 		cp e
 		jr nz, notover
-scrolldon
+scrolldon:
 		call vdpscroll
 		ld de,23		; Line 23, 0
 		jr notover
@@ -1562,7 +1563,7 @@ sc_series:
 		xor a
 		out (38h),a
 		ld a,108
-exsetsysbyte
+exsetsysbyte:
 		exx
 setsysbyte:
 		ld (sysbyte),a
@@ -1573,7 +1574,7 @@ setsysbyte:
 		jr nz, has_paging
 
 		rst 20h
-		ascii "C2014 with no paging. Not supported"
+		defb 'C2014 with no paging. Not supported'
 		defb 13,10,0
 		di
 		halt
@@ -1585,44 +1586,44 @@ has_paging:
 
 		call tmsprobe
 		rst 20h
-		ascii "C2014 8K Boot ROM v0.03"
+		defb 'C2014 8K Boot ROM v0.03'
 		defb 13,10,13,10,0
 
 		ld a,(sysbyte)
 		cp 1
 		jr nz,notclassic
 		rst 20h
-		ascii "RC2014 Classic"
+		defb 'RC2014 Classic'
 		defb 0
 		jr showuart
 notclassic:
 		cp 2
 		jr nz,not512bank
 		rst 20h
-		ascii "RC2014 512K/512K Banked"
+		defb 'RC2014 512K/512K Banked'
 		defb 0
 		jr showuart
 not512bank:
 		push af
 		rst 20h
-		ascii "Small Computer Central "
+		defb 'Small Computer Central '
 		defb 0
 		pop af
 		cp 108
 		jr nz, is_sc114
 		rst 20h
-		ascii "SC108"
+		defb 'SC108'
 		defb 0
 		jr showuart
-is_sc114
+is_sc114:
 		rst 20h
-		ascii "SC114"
+		defb 'SC114'
 		defb 0
 showuart:
 		rst 20h
-		ascii " detected."
+		defb ' detected.'
 		defb 13,10
-		ascii "Console UART: "
+		defb 'Console UART: '
 		defb 0
 
 		ex af,af'	; recover the uart info bits
@@ -1631,18 +1632,18 @@ showuart:
 		dec a
 		jr nz, notacia
 		rst 20h
-		ascii "ACIA at 0xA0"
+		defb 'ACIA at 0xA0'
 		defb 0
 		jr diskprobe
 notacia:	dec a
 		jr nz, not16x50
 		rst 20h
-		ascii "16x50 at 0xA0"
+		defb '16x50 at 0xA0'
 		defb 0
 		jr diskprobe
 not16x50:
 		rst 20h
-		ascii "SIO at 0x80"
+		defb 'SIO at 0x80'
 		defb 0
 
 
@@ -1691,7 +1692,7 @@ not512:
 		; Ok PPIDE present it seems
 
 		rst 20h
-		ascii "PPIDE interface found at 0x20"
+		defb 'PPIDE interface found at 0x20'
 		defb 13,10,0
 
 		ld ix,ppdiskfunc
@@ -1755,7 +1756,7 @@ not_ppide:
 		call ide_writeb_wr
 
 		rst 20h
-		ascii "Trying CF interface at 0x10"
+		defb 'Trying CF interface at 0x10'
 		defb 13,10,0
 
 		jp now_boot
@@ -1849,7 +1850,7 @@ ppide_writeb:
 		ld a,d
 		out (022h),a	; WR goes back high
 		ld a,092h
-		out(023h),a	; Turn the 82C55 back to reading
+		out (023h),a	; Turn the 82C55 back to reading
 		ret
 
 
@@ -1883,7 +1884,7 @@ ppide_writesec:
 		call ppide_xfer_w
 
 		ld a,092h
-		out(023h),a	; Turn the 82C55 back to reading
+		out (023h),a	; Turn the 82C55 back to reading
 		ret
 		
 cf_readb:
@@ -2123,7 +2124,7 @@ hexin:
 badhex:
 		; Error path can eat HL
 		rst 20h
-		ascii "Bad hex"
+		defb 'Bad hex'
 		defb 0
 		pop de
 		pop af
@@ -2184,7 +2185,7 @@ hexout2addr:
 		push bc
 		call phexa
 		rst 20h
-		ascii " : "
+		defb ' : '
 		defb 0
 		pop bc
 		pop de
@@ -2253,7 +2254,7 @@ monitor:
 		push de
 		rst 20h
 		defb 13,10
-		ascii "---*"
+		defb '---*'
 		defb 0
 		call input
 		pop de
@@ -2292,7 +2293,7 @@ goto:
 		call jphl
 		jr monitornr
 
-jpix:		byte 0ddh
+jpix:		defb 0ddh
 jphl:		jp (hl)
 
 inport:
@@ -2322,12 +2323,12 @@ dumpmem_r:
 		ld e,a
 		ld hl, dumpmem_r
 		ld (repeat),hl
-		call hexout2addr	; print "BC : "
+		call hexout2addr	; print 'BC : '
 dumpl:
 		ld a,(bc)
 		push bc
 		push de
-		call phexas		; print "A "
+		call phexas		; print 'A '
 		pop de
 		pop bc
 		inc bc
@@ -2345,7 +2346,7 @@ setmem:
 
 baddisk:
 		rst 20h
-		ascii "Bad disk"
+		defb 'Bad disk'
 		defb 0
 		jr badcmd
 
@@ -2405,7 +2406,7 @@ load_loop:
 		; CPMLDR always start with a JP and we can make any other
 		; loader do the same
 		; The Searle legacy CP/M will follow that by another JP
-		; and then 127,0, "Copyright" so we can spot a raw CP/M 2.2
+		; and then 127,0, 'Copyright' so we can spot a raw CP/M 2.2
 		; for RC2014
 
 		ld a,(08000h)
@@ -2446,13 +2447,13 @@ notsearle:
 
 notbootable:
 		rst 20h
-		ascii "Not bootable"
+		defb 'Not bootable'
 		defb 0
 		jp monitornr
 
 read_fail:
 		rst 20h
-		ascii "Disk error"
+		defb 'Disk error'
 		defb 0
 		jp monitornr
 
@@ -2468,7 +2469,7 @@ xmodem:
 		ld h,b
 		ld l,c
 		rst 20h
-		ascii "Transfer begins..."
+		defb 'Transfer begins...'
 		defb 13,10,0
 
 		ld de,XMTIMER	; nak/timeout counter
@@ -2530,9 +2531,9 @@ newack:
 
 xmtimeout:
 		rst 20h
-		byte 13,10,13,10
-		ascii "*** Timeout"
-		byte 0
+		defb 13,10,13,10
+		defb '*** Timeout'
+		defb 0
 xmdone:
 		jp monitornr
 
@@ -2746,13 +2747,13 @@ tmsfontdata:
 
 		; We fix these up in the build script.
 xfer_buf:
-		phase 0fe00h
+		.phase 0fe00h
 xfer_block:
 
 		; Function pointers
-		jmp romin
-		jmp romout
-		jmp romcall
+		jp romin
+		jp romout
+		jp romcall
 ;	These must be high as they bank flip. We also want them high
 ;	as we patch them (see the 512/512K set up code)
 romout:
@@ -2834,7 +2835,7 @@ getfar:
 		jr romin
 xfer_block_end:
 
-		dephase
+		.dephase
 
 rom_end:
 ;
