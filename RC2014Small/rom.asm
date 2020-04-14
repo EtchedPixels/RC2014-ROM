@@ -720,7 +720,7 @@ shiftmod:
 		; Look to see if there is a shifted translation. If not
 		; keep the original
 		ld b,0
-		ld hl,keymap+0x80
+		ld hl,keymap+080h
 		add hl,bc
 		ld d,a
 		ld a,(hl)
