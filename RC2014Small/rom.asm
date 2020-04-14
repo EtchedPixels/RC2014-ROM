@@ -2746,28 +2746,13 @@ tmsfontdata:
 
 		; We fix these up in the build script.
 xfer_buf:
-		ds xfer_block_end - xfer_block
-
-
-rom_end:
-;
-;	ROM variables
-;
-
-		org 0fe00h
-
-;
-;	Block transfer routines. Having a tiny number of routines in
-;	high memory is smaller and faster than bounce buffers. These are
-;	stashed in ROM by the build script.
-
+		phase 0fe00h
 xfer_block:
+
 		; Function pointers
 		jmp romin
 		jmp romout
 		jmp romcall
-
-
 ;	These must be high as they bank flip. We also want them high
 ;	as we patch them (see the 512/512K set up code)
 romout:
@@ -2796,7 +2781,6 @@ romcall:
 		ld sp,(tmpsp)
 		ld a,(tmpa)
 		ret
-
 ppide_xfer_r:
 		call romout
 ppide_readloop:
@@ -2828,7 +2812,6 @@ ppide_writeloop:
 		out (022h),a	; WR goes back high
 		djnz ppide_writeloop
 		jr romin
-
 cf_xfer_r:
 		call romout
 		inir
@@ -2840,7 +2823,32 @@ cf_xfer_w:
 		otir
 		otir
 		jr romin
+
+putfar:
+		call romout
+		ld (hl),c
+		jr romin
+getfar:
+		call romout
+		ld c,(hl)
+		jr romin
 xfer_block_end:
+
+		dephase
+
+rom_end:
+;
+;	ROM variables. Note that the helper code above fits exactly between
+;	fe00 and fe7f. So the rest will need shuffling if we change it
+;
+
+		org 0fe80h
+
+;
+;	Block transfer routines. Having a tiny number of routines in
+;	high memory is smaller and faster than bounce buffers. These are
+;	stashed in ROM by the build script.
+
 
 sysbyte:	db 0
 bootdev:	db 0		; must follow sysbyte
@@ -2873,18 +2881,4 @@ repeat:		dw 0
 inbuf:		ds 33		; including \0
 twidth:		db 0		; number of bytes for dump (not true width)
 
-;
-;	BIOS code is invoked with
-;
-;		ld (tmpsp),sp
-;		ld sp,0
-;		out (38),a
-;		call foo
-;		out (38),a
-;		ld sp,(tmpsp)
-;	
-;
-;	We don't use interrupts. If we do then we'll need to do some more
-;	work on wrapping and IRQ wrappers
-;
 		end rst0
