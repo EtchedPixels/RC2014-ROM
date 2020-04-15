@@ -132,7 +132,7 @@ dpbase0:
         dw 0FFFEh       ; ALV (unique scratch pad for allocation information)
 	dw 0FFFEh	; Directory buffer control block (auto assign)
 	dw 0FFFEh       ; Data BCB
-        dw 0FFFEh       ; HASH
+        dw 0FFFFh       ; HASH
         db 00h          ; HASH bank
         ; end of disk 0
 
@@ -146,7 +146,7 @@ dpbase1:
         dw 0FFFEh       ; ALV (unique scratch pad for allocation information)
 	dw 0FFFEh	; Directory buffer control block (auto assign)
 	dw 0FFFEh       ; Data BCB
-        dw 0FFFEh       ; HASH
+        dw 0FFFFh       ; HASH
         db 00h          ; HASH bank
         ; end of disk 1
 
@@ -160,7 +160,7 @@ dpbase2:
         dw 0FFFEh       ; ALV (unique scratch pad for allocation information)
 	dw 0FFFEh	; Directory buffer control block (auto assign)
 	dw 0FFFEh       ; Data BCB
-        dw 0FFFEh       ; HASH
+        dw 0FFFFh       ; HASH
         db 00h          ; HASH bank
         ; end of disk 2
 
@@ -174,10 +174,21 @@ dpbase3:
         dw 0FFFEh       ; ALV (unique scratch pad for allocation information)
 	dw 0FFFEh	    ; Directory buffer control block (auto assign)
 	dw 0FFFEh       ; Data BCB
-        dw 0FFFEh       ; HASH
+        dw 0FFFFh       ; HASH
         db 00h          ; HASH bank
         ; end of disk 1
 
+dpbasem:
+        dw 0            ; sector translation table (0 = no translation)
+	db 0,0,0,0,0,0,0,0,0  ; BDOS scratch area
+	db 0            ; Media flag
+        dw dpbram       ; DPB (disk parameter block)
+        dw 0            ; CSV (unique scratch pad used to check for changed disks)
+        dw 0FFFEh       ; ALV (unique scratch pad for allocation information)
+	dw 0FFFEh	    ; Directory buffer control block (auto assign)
+	dw 0FFFFh       ; Data BCB (not required)
+        dw 0FFFFh       ; HASH (none)
+        db 00h          ; HASH bank
 
 dphtab	dw 0		; A: floppy
 	dw 0		; B: floppy
@@ -185,16 +196,16 @@ dphtab	dw 0		; A: floppy
 	dw dpbase1	; D:
 	dw dpbase2      ; E:
 	dw dpbase3	; F:
-	dw 0		; GenCPM requires the rest are here and 0
-	dw 0		; Need to add G-J as second drive
-	dw 0
-	dw 0
-	dw 0
-	dw 0
-	dw 0
-	dw 0
-	dw 0
-	dw 0
+	dw 0		; G; GenCPM requires unused present and 0
+	dw 0		; H:
+	dw 0		; I:
+	dw 0		; J:
+	dw 0		; K:
+	dw 0		; L:
+	dw dpbasem	; M: ram drive
+	dw 0		; N:
+	dw 0		; O:
+	dw 0		; P:
 
 ndisks  equ 6               ; number of disks we defined
 
@@ -241,6 +252,26 @@ dpblk:
         dw 0            ; OFF: track offset (number of system tracks)
 	db 2	    ; PSH - 512 byte sectors
 	db 3	    ; PHM - 512 byte sectors
+
+dpbram:
+        dw 2            ; SPT: number of 128 byte sectors per track
+        db 3            ; BSH: block shift factor (see manual for table)
+        db 7            ; BLM: block mask (see manual for table)
+        db 0            ; EXM: extent mask (see manual for table, using entries
+			; marked N/A turns out to be a bad idea!)
+        dw 62      	; DSM: (disk bytes / block bytes) - 1,
+			; change alv00/01 etc if you change this
+			; this is the number of the last sector on the disk,
+			; excluding system tracks (ie more system tracks ->
+			; this gets smaller)
+        dw 31           ; DRM: directory max entries - 1
+        db 080h         ; AL0: directory sector allocation bitmask byte 0
+        db 00h          ; AL1: directory sector allocation bitmask byte 1
+        dw 8000h        ; CKS: check size (0x8000 = fixed media, no check)
+        dw 0            ; OFF: track offset (number of system tracks)
+	db 0	        ; PSH - 128 byte sectors
+	db 1	        ; PHM - 128 byte sectors
+
 
 
 ; The device utility table.
@@ -387,6 +418,13 @@ home:
 	ld ix,rom_home
 	jr dorom
 seldsk:
+	ld a,c
+	cp 12
+	jr z, selm_ok		; M drive we know about
+	cp 7			; reject any drive we don't know about
+	ld hl,0			; so we don't blow up if the ROM adds stuff
+	ret nc			; and the user hits that drive letter
+selm_ok:
 	push ix
 	ld ix,rom_seldsk
 	call romcall
@@ -487,8 +525,7 @@ reserv1:
 reserv2:
 	ret
 
-;---------------------------------------------------------------------------------------------------------------
-; debug functions (ideally to be removed in final version, if we ever get that far!)
+; debug functions (ideally to be removed in final version)
 strout:     ; print string pointed to by HL
 	push af
         push bc

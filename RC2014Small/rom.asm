@@ -1659,6 +1659,10 @@ diskprobe:
 		ld bc,xfer_block_end - xfer_block
 		ldir
 
+		; Start by assuming no ramdisc
+		xor a
+		ld (ramdisc),a
+
 		;
 		; Patch the disk helpers
 		;
@@ -1673,7 +1677,51 @@ diskprobe:
 		; still 0
 		ld a,020h
 		ld (romout + 3),a
+		; For now. We could do a big RAMdisc but really 512/512
+		; is just there for testing
+		jr no_ramdisc
 not512:
+		cp 1
+		jr z, no_ramdisc
+		cp 108
+		jr z, ramdisc64
+		cp 114
+		jr nz, no_ramdisc
+ramdisc64:
+		; The 108 and 114 enables are in different places. Just hit
+		; both
+		ld a,080h
+		out (038h),a
+		rlca
+		out (030h),a
+		; ROM is now in, RAM is now altbank, stack swapped under us
+		ld hl,xfer_buf
+		ld de,xfer_block
+		ld bc,xfer_block_end - xfer_block
+		ldir
+		ld c,0e5h
+		ld hl,4000h
+		; Ensure the SC108 is back on the main bank as we will
+		; keep flipping there whilst the SC114 we keep in the alt
+		; bank for the whole process. This is a bit ugly because
+		; of the full RAM switching affecting our stack
+		xor a
+		out (038h),a
+rdwipe:
+		dec hl
+		call altputfar
+		ld a,h
+		or l
+		jr nz,rdwipe
+		xor a
+		; Restore SC114 RAM switch (no-op on SC108)
+		out (030h),a
+		inc a
+		ld (ramdisc),a
+		rst 20h
+		defb '63K RAMdisc initialized as M:'
+		defb 13,10,0
+no_ramdisc:
 		;
 		; Look for PPIDE
 		;
@@ -1753,7 +1801,7 @@ not_ppide:
 		ld de,0901h
 		call ide_writeb
 		ld de,0fefh
-		call ide_writeb_wr
+		call ide_writeb_cmd
 
 		rst 20h
 		defb 'Trying CF interface at 0x10'
@@ -1770,6 +1818,54 @@ cfdiskfunc:
 ;	IDE disk subsystem
 ;
 
+ide_writeb_cmd
+		call ide_writeb_wr
+		ret nz		; NZ = OK
+		and 1		; Error bit ?
+		ret z		; No (Z as wanted for fail)
+ide_perror:
+		rst 20h
+		defb 'IDE disk error: '
+		defb 0
+		bit 6,a
+		jr z, err_notunc
+		rst 20h
+		defb 'UNK '
+		defb 0
+err_notunc	bit 5,a
+		jr z, err_notmc
+		rst 20h
+		defb 'MC '
+		defb 0
+err_notmc:	bit 4,a
+		jr z, err_notidnf
+		rst 20h
+		defb 'IDNF '
+		defb 0
+err_notidnf	bit 3,a
+		jr z, err_notmcr
+		rst 20h
+		defb 'MCR '
+		defb 0
+err_notmcr:	bit 2,a
+		jr z, err_notabrt
+		rst 20h
+		defb 'ABRT '
+		defb 0
+err_notabrt:	bit 1,a
+		jr z, err_nottk0nf
+		rst 20h
+		defb 'TK0NF'
+		defb 0
+err_nottk0nf:	bit 0,a
+		jr z, err_notamnf
+		rst 20h
+		defb 'AMNF'
+		defb 0
+err_notamnf:
+		xor a
+		ret
+
 ide_writeb_wr:
 		call ide_writeb
 
@@ -1780,19 +1876,14 @@ ide_waitr:
 		call ide_readb
 		bit 7,a
 		jr nz, ide_waitr
-		ld c,a
-		and 041h
-		cp 040h
-		ld a,c		; so can check ERR bit
-		ret z		; Z set C clear = ok
-		rra
-		ret c		; NZ, C set = error
+		bit 6,a
+		ret nz		; NZ = good
 		dec de
 		ld a,d
 		or e
 		jr nz, ide_waitr
-		inc a		; NZ, C clear = timeout
-		ret
+		; Z = error
+		jp ide_perror
 
 ide_wait_drq:
 		ld de,2000h
@@ -1807,6 +1898,8 @@ ide_waitd:
 		ld a,d
 		or e
 		jr nz, ide_waitd
+		; return Z - timeout
+		ret
 retz:		xor a
 		ret
 
@@ -1923,7 +2016,7 @@ ide_setlba:
 disk0:
 		ld d,0eh		; LBA 3/drive
 		call ide_writeb_wr
-		ret nz
+		ret z
 		ld a,(diskdev)
 		; sub 2			; floppies (doesn't affect and..)
 		and 1			; 2 per disk
@@ -1943,6 +2036,60 @@ disk0:
 		xor a			; Z = OK
 		ret
 
+		;
+		;	Ram disc. 128 byte sectors. Turn track/sector into
+		;	an HL address. We use two sectors/track for our
+		; 	geometry.
+		;
+
+rdblock:	ld a,(disksec)
+		rlca		; was 0 or 1 now 0 or 80h
+		ld l,a
+		ld a,(disktrk)
+		ld h,a		; 256 bytes/track so this is the high byte
+		ld de,(diskdma)
+		ld b,128
+		ret
+
+rdread:		call rdblock
+		; This is horrible due to the full RAM switch
+		ld a,'R'
+		rst 8
+rdrloop:	ld a,01h
+		out (30h),a
+		call altgetfar
+		xor a
+		out (30h),a
+		ex de,hl
+		call putfar
+		ex de,hl
+		inc de
+		inc hl
+		djnz rdrloop
+		ld a,'r'
+		rst 8
+		xor a
+		ret
+
+rdwrite:	call rdblock
+		ld a,'W'
+		rst 8
+rdwloop:	ex de,hl
+		call getfar
+		ex de,hl
+		ld a,1
+		out (30h),a
+		call altputfar
+		xor a
+		out (30h),a
+		inc de
+		inc hl
+		djnz rdwloop
+		ld a,'w'
+		rst 8
+		xor a
+		ret
+
 
 		; Now map it
 
@@ -1960,19 +2107,33 @@ setdma:
 seldsk:
 		ld b,0		; So the caller knows if it worked
 		ld a,c
+		cp 12		; M:
+		jr z,chkramd
 		cp 6		; AB - floppies, CD - disk 0 EF - disk 1
 		ret nc
+seldsk_ok:
 		inc b		; worked
 		ld (diskdev),a
-		ret		; NC = error, C = ok
+		ret		; B = 0 error 1 = good
 				; caller BIOS owns DPH to keep GENCPM happy
+;
+;	M: as per tradition
+;
+chkramd:
+		ld a,(ramdisc)
+		or a
+		ret z		; No RAMdisc
+		ld a,12		; restore drive code
+		jr seldsk_ok
 
 read:
-		push ix
-		ld ix,(diskfunc)
 		ld a,(diskdev)
 ;		cp 2
 ;		jr c, floprd
+		cp 12
+		jr z, rdread
+		push ix
+		ld ix,(diskfunc)
 		cp 6
 		jr nc, failed
 		call ide_setlba		; sets LBA, drive and count 1
@@ -1986,7 +2147,7 @@ read:
 		call ide_wait_ready
 		pop ix
 		ld a,0
-		ret z			; OK
+		ret nz			; OK
 		inc a
 		ret			; Error
 failed:
@@ -1995,11 +2156,13 @@ failed:
 		ret
 
 write:
-		push ix
-		ld ix,(diskfunc)
 		ld a,(diskdev)
 ;		cp 2
 ;		jr c, flopwr
+		cp 12
+		jp z, rdwrite
+		push ix
+		ld ix,(diskfunc)
 		cp 6
 		jr nc, failed
 		call ide_setlba		; sets LBA, drive and count 1
@@ -2013,7 +2176,7 @@ write:
 		call ide_wait_ready
 		pop ix
 		ld a,0
-		ret z
+		ret nz
 		inc a
 		ret
 
@@ -2023,15 +2186,24 @@ sectran:
 		ret
 
 flush:
+		ld a,(diskdev)
 		cp 2
 		jr c, noflush
+		cp 12
+		jr z, noflush
+		push ix
+		ld ix,(diskfunc)
 		call ide_setlba		; LBA will be ignored but drive
 					; will be right
 		jr nz, failed
 		ld de,0fe7h		; flush cache
 		call ide_writeb_wr
-		jr nz, failed
+		; We don't treat a failed flush as an error or report
+		; it. That usually just means the drive doesn't support it
+		pop ix
 noflush:
+		ld a,'F'
+		rst 8
 		xor a			; it worked fine
 		ret
 
@@ -2611,8 +2783,7 @@ unused:
 		ret
 
 ;
-;	Moved to ff00 with BIOS work stack above it. May be able to tighten
-;	this a bit
+;	Moved to ff00 with BIOS work stack and video buffer above it
 ;
 functions:
 		jp unused		; may want to add a BIOS wboot hook ?
@@ -2833,6 +3004,21 @@ getfar:
 		call romout
 		ld c,(hl)
 		jr romin
+;
+;	RAMdisc private helper logic. Because we flip RAM we cannot call a
+;	helper to switch stacks out, but we can return through the helper
+;	because it will stack switch and ret on the old (correct) stack
+;
+altputfar:
+		ld a,081h
+		out (038h),a
+		ld (hl),c
+		jr romin
+altgetfar:
+		ld a,081h
+		out (038h),a
+		ld c,(hl)
+		jp romin
 xfer_block_end:
 
 		.dephase
@@ -2840,10 +3026,11 @@ xfer_block_end:
 rom_end:
 ;
 ;	ROM variables. Note that the helper code above fits exactly between
-;	fe00 and fe7f. So the rest will need shuffling if we change it
+;	fe00 and fe83.  So the rest will need shuffling if we change it too
+;	much
 ;
 
-		org 0fe80h
+		org 0feb0h
 
 ;
 ;	Block transfer routines. Having a tiny number of routines in
@@ -2867,7 +3054,6 @@ vdpxy:		dw 0
 vdpcursor:	dw 0
 vdpsetxy:	db 0
 vdpcursch	db 0
-scrollbuf:	ds 40
 kbport:		dw 0
 kbsave:		db 0
 kbdelay:	dw 0
@@ -2881,5 +3067,11 @@ abort_sp:	dw 0
 repeat:		dw 0
 inbuf:		ds 33		; including \0
 twidth:		db 0		; number of bytes for dump (not true width)
+ramdisc:	db 0		; do we have a ram disc ?
+;
+;	Scroll buffer with stack above it at the top
+;
+		org 0ff60h
+scrollbuf:	ds 40
 
 		end rst0
