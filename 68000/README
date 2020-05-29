@@ -1,0 +1,3 @@
+This is just some experimenting I was doing with ideas for a simple ROM DOS
+for 68K. It's mostly here because people wanted examples of standalone building
+with gcc 68K.
