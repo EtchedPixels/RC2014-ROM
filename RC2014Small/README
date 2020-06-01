@@ -33,7 +33,8 @@ This is not yet intended to be used for anything real!
 
 
 SCM also uses space for things that probably can't be fitted in or don't really
-make sense in the CP/M BIOS mindset.
+make sense in "Get to CP/M" BIOS mindset. They are trying to solve different
+problems thus SCM has
 
 - Z80 assembler
 - Z80 disassembler

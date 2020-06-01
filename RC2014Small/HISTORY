@@ -1,3 +1,10 @@
 
 
 0.03	12 Apr 2020		First usable release (serial only)
+
+0.04
+-	Correct DPB for second drive
+-	Support boot from either IDE drive
+[-]	Classic RC2014 compatible drive DPB ?
+[-]	Partition table offset support ?
+

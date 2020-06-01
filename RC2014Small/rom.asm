@@ -37,7 +37,7 @@ SOH		equ	1
 
 rst0:
 		di
-		ld sp,0
+		ld sp,0ffffh
 		jp start
 		nop
 rst8:				; print char in A, preserve BC-HL
@@ -96,6 +96,9 @@ poppers:
 		ret
 
 start:
+		ld a,0ffh
+		out (00h),a		; debug
+		;
 		; Start by tring to do UART detection without writing to
 		; RAM. Get a first letter out any way we can so the user
 		; has diagnostics
@@ -104,7 +107,149 @@ start:
 		; We may have to slip in some very early platform detection
 		; to also support Tom's SBC and the Linc80
 		;
+		ld a,040h
+		defb 0cbh,037h
+		jp m,is_z80
 
+		ld a,0aah
+		out (00h),a		; debug
+
+		;
+		; Configure the CPU. Assume worst case as we can more
+		; easily figure out what degree of borked the processor
+		; is once up and running.
+		;
+
+		ld c,0ffh	; BTIR
+;		ld l,08ch	; turn on max wait states,turn off mp
+		ld l,00h	; turn off wait states, turn off mp
+				; BTIR affect bottom half of address space
+		defb 0edh, 6eh	; LDCTL (C),HL
+
+		ld c,02h	; BTCR
+;		ld l,0ffh	; max wait sates for everything
+		ld l,00h	; wait states off
+				; BTCR affects high memory (8MB+) and I/O
+		defb 0edh, 6eh	; LDCTL (C),HL
+
+		ld c,12h	; CCR
+		ld l,020h	; cache code only
+		defb 0edh, 6eh	; LDCTL (C),HL
+
+		defb 0edh, 65h	; and flush them
+
+		ld c,08h
+		ld l,0ffh	; control space
+		defb 0edh, 6eh	; LDCTL (C),HL
+
+		xor a
+		out (0xEB),a	; Turn off DRAM refreshing
+
+		;
+		; Z280 - so use internal UART
+		;
+		ld c,08h
+		ld l,0feh
+		defb 0edh, 6eh	; LDCTL (C),HL
+		; Internal UART I/O space
+		ld a,0c2h	; x16 8bit no parity, ext clock
+		out (10h),a
+		ld a,80h
+		out (12h),a	; transmitter on
+		out (14h),a	; receiver on
+		; Say hello
+waittx:
+		in a,(12h)
+		rra
+		jr nc,waittx
+		ld a,'R'
+		out (18h),a
+		ld c,08h
+		ld l,00h
+		db 0edh,06eh
+		ld a,0abh
+		out (00h),a	; debug
+		ld hl,z280func
+		ld de,noauxfunc
+		ld a,4
+		jp init_ram
+
+z280func:
+		defw z280out
+		defw z280in
+		defw z280poll
+		defw z280opoll
+;
+;	The I/O bank switching is annoying!
+;
+z280out:
+		push bc
+		push hl
+		ld c,08h
+		ld l,0feh
+		defb 0edh,06eh
+		ld b,a
+waito:
+		in a,(012h)
+		rra
+		jr nc, waito
+		ld a,b
+		out (018h),a
+		ld c,08h
+		ld l,00h
+		defb 0edh,06eh
+		pop hl
+		pop bc
+		ret
+z280in:
+		push bc
+		push hl
+		ld c,08h
+		ld l,0feh
+		defb 0edh,06eh
+		in a,(016h)
+		ld c,08h
+		ld l,00h
+		defb 0edh,06eh
+		pop hl
+		pop bc
+		ret
+		
+z280poll:
+		push bc
+		push hl
+		ld c,08h
+		ld l,0feh
+		defb 0edh,06eh
+		in a,(014h)
+		ld c,08h
+		ld l,00h
+		defb 0edh,06eh
+		pop hl
+		pop bc
+		and 10h
+		ret
+		
+z280opoll:
+		push bc
+		push hl
+		ld c,08h
+		ld l,0feh
+		defb 0edh,06eh
+		in a,(012h)
+		ld c,08h
+		ld l,00h
+		defb 0edh,06eh
+		pop hl
+		pop bc
+		and 01h
+		ret
+		
+
+
+is_z80:
+		ld a,0cch
+		out (00h),a		; debug
 		;
 		; ACIA detection: TX ready will be 1. Reset will force TX
 		; ready to 0. If that fails it's not an ACIA
@@ -141,6 +286,12 @@ noauxfunc:
 		defw ret255
 
 aciaout:
+		ld b,a
+aciaow:
+		in a,(0a0h)
+		and 02h
+		jr z,aciaow
+		ld a,b
 		out (0a1h),a
 		ret
 aciain:
@@ -242,6 +393,11 @@ ns16x50func:
 		defw ns16x50opoll
 
 ns16x50out:
+		ld b,a
+ns16x50outw:	in a,(0a5h)
+		and 20h
+		jr z,ns16x50outw
+		ld a,b
 		out (0a0h),a
 		ret
 ns16x50in:
@@ -263,6 +419,11 @@ ns16x50altfunc:
 		defw ns16x50altopoll
 
 ns16x50altout:
+		ld b,a
+ns16x50aoutw:	in a,(0adh)
+		and 20h
+		jr z,ns16x50aoutw
+		ld a,b
 		out (0a8h),a
 		ret
 ns16x50altin:
@@ -297,7 +458,7 @@ not_16x50:
 		ld a,2
 		ld hl,siofunc
 		ld de,siobfunc
-		ld a,4
+		ld a,3
 		jp init_ram
 siofunc:
 		defw sioout
@@ -310,7 +471,11 @@ siobfunc:
 		defw siobpoll
 		defw siobopoll
 
-sioout:
+sioout:		ld b,a
+siooutw:	in a,(080h)
+		and 4
+		jr z,siooutw
+		ld a,b
 		out (081h),a
 		ret
 sioin:
@@ -325,7 +490,11 @@ sioopoll:
 		and 4
 		ret
 
-siobout:
+siobout:	ld b,a
+sioboutw:	in a,(082h)
+		and 4
+		jr z,sioboutw
+		ld a,b
 		out (083h),a
 		ret
 siobin:
@@ -359,17 +528,12 @@ sio_setup:
 ;	These implement the corresponding CP/M BIOS functions.
 ;
 conout:
-		push ix
-		ld ix,(confunc)
-		ld l,(ix + 6)
-		ld h,(ix + 7)
-conoutw:	call jphl
-		or a
-		jr z,conoutw
+		ld hl,(confunc)
+		ld a,(hl)
+		inc hl
+		ld h,(hl)
+		ld l,a
 		ld a,c
-		ld l,(ix)
-		ld h,(ix + 1)
-		pop ix
 		jp (hl)
 
 conin:
@@ -1521,6 +1685,8 @@ not_512512:
 		; We do however know that RAM is present high in all these
 		; cases already
 		;
+		ld a,082h
+		out (00h),a		; debug
 		exx
 		ld hl,is_classic
 		ld de,scrollbuf		; good a place as any
@@ -1530,6 +1696,8 @@ not_512512:
 		ld a,01h
 		jr nz, exsetsysbyte	; Was a classic
 
+		ld a,083h
+		out (00h),a		; debug
 		ld a,c			; Check if just a busted page setup
 		or a
 
@@ -1543,6 +1711,8 @@ not_512512:
 
 
 sc_series:
+		ld a,084h
+		out (00h),a		; debug
 		; Ok 108 or 114 ?
 		; We last wrote 00h so we are A16 low, ROM in
 		ld a,80h
@@ -1562,6 +1732,8 @@ sc_series:
 		; SC108 - put the RAM back right
 		xor a
 		out (38h),a
+		ld a,085h
+		out (00h),a		; debug
 		ld a,108
 exsetsysbyte:
 		exx
@@ -1580,11 +1752,13 @@ setsysbyte:
 		halt
 
 has_paging:
+		ld a,086h
+		out (00h),a		; debug
 		; default to 16 byte wide monitor displaysa
 		ld a,16
 		ld (twidth),a
 
-		call tmsprobe
+;		call tmsprobe
 		rst 20h
 		defb 'C2014 8K Boot ROM v0.03'
 		defb 13,10,13,10,0
@@ -1641,9 +1815,15 @@ notacia:	dec a
 		defb '16x50 at 0xA0'
 		defb 0
 		jr diskprobe
-not16x50:
+not16x50:	dec a
+		jr nz, notsio
 		rst 20h
 		defb 'SIO at 0x80'
+		defb 0
+		jr diskprobe
+notsio:
+		rst 20h
+		defb 'Z280 internal UART'
 		defb 0
 
 
@@ -1676,7 +1856,7 @@ diskprobe:
 		; And the register value for ROM out (020h) - ROM in is
 		; still 0
 		ld a,020h
-		ld (romout + 3),a
+		ld (romout + 1),a
 		; For now. We could do a big RAMdisc but really 512/512
 		; is just there for testing
 		jr no_ramdisc
@@ -2047,7 +2227,20 @@ rdblock:	ld a,(disksec)
 		ld l,a
 		ld a,(disktrk)
 		ld h,a		; 256 bytes/track so this is the high byte
+
+		ld c,l
+		ld b,h
+		call hexout2addr
+		ld a,','
+		rst 8
+	
 		ld de,(diskdma)
+		ld c,e
+		ld b,d
+		call hexout2addr
+		rst 20h
+		defb 13,10,0
+
 		ld b,128
 		ret
 
@@ -2095,16 +2288,26 @@ rdwloop:	ex de,hl
 
 setsec:
 		ld (disksec),bc
+		rst 20h
+	        defb 'SETSEC',0
 		ret
 home:
 		ld bc,0
+		rst 20h
+	        defb 'HOME',0
 settrk:
 		ld (disktrk),bc
+		rst 20h
+	        defb 'SETTRK',0
 		ret
 setdma:
 		ld (diskdma),bc
+		rst 20h
+	        defb 'SETDMA',0
 		ret
 seldsk:
+		rst 20h
+	        defb 'SELDSK',0
 		ld b,0		; So the caller knows if it worked
 		ld a,c
 		cp 12		; M:
@@ -2127,27 +2330,43 @@ chkramd:
 		jr seldsk_ok
 
 read:
+		rst 20h
+	        defb 'READ',0
 		ld a,(diskdev)
 ;		cp 2
 ;		jr c, floprd
 		cp 12
-		jr z, rdread
+		jp z, rdread
 		push ix
 		ld ix,(diskfunc)
 		cp 6
 		jr nc, failed
+		rst 20h
+		defb 'READCF',0
 		call ide_setlba		; sets LBA, drive and count 1
 		jr nz, failed
+		rst 20h
+		defb 'LBASET',0
 		ld de,0f20h		; READ
 		call ide_writeb
 		call ide_wait_drq
 		jr z, failed		; No DRQ in time
+		rst 20h
+		defb 'GOTDRQ',0
 		ld de,(diskdma)
 		call ide_readsec
+		rst 20h
+		defb 'READSEC OK',0
 		call ide_wait_ready
+		push af
+		rst 20h
+		defb 'READY AND DONE',0
+		pop af
 		pop ix
 		ld a,0
 		ret nz			; OK
+		rst 20h
+		defb 'ERROR',0
 		inc a
 		ret			; Error
 failed:
@@ -2156,6 +2375,8 @@ failed:
 		ret
 
 write:
+		rst 20h
+	        defb 'WRITE',0
 		ld a,(diskdev)
 ;		cp 2
 ;		jr c, flopwr
@@ -2181,11 +2402,15 @@ write:
 		ret
 
 sectran:
+		rst 20h
+	        defb 'SECTRAN',0
 		ld h,b
 		ld l,c
 		ret
 
 flush:
+		rst 20h
+	        defb 'FLUSH',0
 		ld a,(diskdev)
 		cp 2
 		jr c, noflush
@@ -2211,6 +2436,8 @@ multio:
 		ret
 
 move:
+		rst 20h
+	        defb 'MOVE',0
 		ex de,hl
 		ldir
 		ex de,hl
@@ -2930,10 +3157,14 @@ xfer_block:
 romout:
 		ld a,1
 		out (038h),a
+                out (080h),a
+		defb 0edh, 65h	; Flush I cache
 		ret
 romin:
 		ld a,0
 		out (038h),a
+                out (080h),a
+		defb 0edh, 65h	; Flush I cache
 		ret
 
 ;
@@ -2987,23 +3218,39 @@ ppide_writeloop:
 cf_xfer_r:
 		call romout
 		inir
+		nop		; Z280 (may not be needed)
+		nop
+		nop
+		nop
 		inir
+		nop		; Z280 (may not be needed)
+		nop
+		nop
+		nop
 		jr romin
 
 cf_xfer_w:
 		call romout
 		otir
+		nop		; Z280 (may not be needed)
+		nop
+		nop
+		nop
 		otir
+		nop		; Z280 (out/jump bug on older CPUs)
+		nop
+		nop
+		nop
 		jr romin
 
 putfar:
 		call romout
 		ld (hl),c
-		jr romin
+		jp romin
 getfar:
 		call romout
 		ld c,(hl)
-		jr romin
+		jp romin
 ;
 ;	RAMdisc private helper logic. Because we flip RAM we cannot call a
 ;	helper to switch stacks out, but we can return through the helper
@@ -3013,7 +3260,7 @@ altputfar:
 		ld a,081h
 		out (038h),a
 		ld (hl),c
-		jr romin
+		jp romin
 altgetfar:
 		ld a,081h
 		out (038h),a
@@ -3026,7 +3273,7 @@ xfer_block_end:
 rom_end:
 ;
 ;	ROM variables. Note that the helper code above fits exactly between
-;	fe00 and fe83.  So the rest will need shuffling if we change it too
+;	fe00 and fe9c.  So the rest will need shuffling if we change it too
 ;	much
 ;
 
@@ -3035,7 +3282,7 @@ rom_end:
 ;
 ;	Block transfer routines. Having a tiny number of routines in
 ;	high memory is smaller and faster than bounce buffers. These are
-;	stashed in ROM by the build script.
+;	stashed in ROM and copied up
 
 
 sysbyte:	db 0
