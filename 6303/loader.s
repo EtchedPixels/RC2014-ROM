@@ -3,8 +3,7 @@
 ;	0000-7FFF are RAM 8000-FFFF ROM (except I/O)
 ;
 ;	We load an image from 0400-FDFF
-;	and then jump to C102 if the marker is right (this needs to move
-;	now the I/O has moved)
+;	and then jump to 0402 if the marker is right
 ;
 
 	ORG $0200

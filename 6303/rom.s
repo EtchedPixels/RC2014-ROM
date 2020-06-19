@@ -1,12 +1,8 @@
 ;
-;	6502 mini boot rom for 512K ROM/RAM card
-;
-;	Our address map has the low and high 32K inverted so whilst we
-;	program the bank registers the same as other CPU ports we are in
-;	fact locating the ROM in the upper 32K
+;	6303 mini boot rom for 512K ROM/RAM card
 ;
 ;	At the point of entry the first ROM bank is mapped over the full 64K
-;	This code must run in the top 16K (as the 6502 sees it)
+;	This code must run in the top 16K (as the 6303 sees it)
 ;
 
 	ORG $C000
@@ -48,8 +44,8 @@ wait_uart:
 ;
 ;	Do byte wide for now - we can probably do this with two STD
 ;
-	LDAA #32			; Low 32K becomes 6502 RAM
-	STAA $78,X			; Needs to be this way up for a 6502
+	LDAA #32			; Low 32K becomes 6303 RAM
+	STAA $78,X			; Needs to be this way up for a 6303
 	LDAA #33
 	STAA $79,X
 	LDAA #1				; Map the ROM backwards so that we keep 
