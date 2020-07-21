@@ -1,0 +1,105 @@
+CUBIX 6809
+----------
+
+This is a minor port of Dave Dunfield's CUBIX OS.
+
+http://www.classiccmp.org/dunfield/d6809/cubix.htm
+
+Known Bugs:
+- The ROM test will incorrectly report a FAIL at this point. This is a cosmetic
+  glitch that needs fixing.
+
+Unsupported:
+- Baud rate setting
+
+Configuration:
+
+The system is configured with two 4MB volumes that are laid out with 1MB
+free then the two 4MB disk volumes. This allows for a PC style boot area
+and partition table to be present (the CUBIX disk area can be protected
+with a non-DOS partition from sector 2048 for 8MB)
+
+Supported Hardware:
+
+6809 CPU card with I/O at 0xFExx
+16C550A Serial card at 0xC0 (optionally second port at 0xC8)
+RC2014 512K/512K banked RAM/ROM card
+IDE CF adapter at 0x10
+Clock for the 6809 CPU
+optionally an SC129 at 0x80 as a debug card during boot
+
+The serial port is set to 38400 8N1. It prints a '*' very early in
+initialization before anything that depends upon working RAM or other
+devices.
+
+Installation:
+
+CUBIX itself runs from ROM and handles all the hardware setup. After running
+a memory test it will initialize and display a '*' prompt. Hitting escape
+will shortcut the memory test.
+
+If you are creating a new CF disk rather than using the supplied image:
+(supplied image will be available soon)
+
+format a:
+y
+format b:
+y
+
+set default [system]
+download asm.exe
+
+(send asm.hex)
+
+repeat for each of the binaries supplied in .hex format.
+
+
+
+set default [main]
+
+to get back to the normal working directory.
+
+
+You can then download other files as desired, including Micro-C.
+
+Using Cubix:
+
+See the CUBIX manuals included in the downloads from 
+http://www.classiccmp.org/dunfield/d6809/index.htm
+
+Roughly speaking though
+
+drive:[directory]pathname.ext
+
+set default controls what is used if you omit the full pathname.
+
+Everything has a directory and there is only one level of directory naming.
+
+[system] is special and holds commands
+[main] is where you start
+
+Wilcards apply at both levels. So you can say
+
+DIR A:[*]
+
+to see everything on drive A.
+
+DIR, COPY, DELETE, TYPE do exactly as you would expect including wildcards.
+CHKDISK checks a disk for errors
+ED is a visual editor. See the manual for more information. Hit F1 then type
+EX and hit F1 again to save and exit.
+
+A prorgrammers manual and source to the utilities and applications is included
+in the full source distribution. These can be built under Cubix. A small number
+of applications such as Micro-C, that still have a commercial form are supplied
+binary only.
+
+The system contains a fair set of languages, assembler and other development
+tools and is basically self hosting.
+
+
+Things Left To Do
+-----------------
+- Serial baud rate setting
+- Floppy disk
+- Possibly ACIA support
