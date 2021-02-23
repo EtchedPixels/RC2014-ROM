@@ -1,4 +1,6 @@
 all: rom cubix.512
+
+CFLAGS = -O2 -Wall -pedantic
 #
 #	Simple test ROM
 #

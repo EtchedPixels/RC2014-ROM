@@ -31,7 +31,8 @@ int main(int argc, char *argv[])
     buf[0x1ffe] = (BASE + 3) >> 8;
     buf[0x1fff] = (BASE + 3) & 0xFF;
     /* Now checksum */
-    p = buf;
+    n = 0;
+    p = buf + 2;
     while(p < buf + 0x1e00)
         n += *p++;
     buf[0] = n >> 8;
