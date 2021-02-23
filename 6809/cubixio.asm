@@ -19,7 +19,7 @@ HEAD	EQU	5
 SEC	EQU	6
 
 ;
-;	Magic constants. We have F99F to the vectors free, except that on
+;	Magic constants. We have F9CC to the vectors free, except that on
 ;	our set up FExx is I/O which means we need to finish at FDFF and
 ;	we also have to slightly hack CUBIX not to do the initial checksum
 ;	to FFFF
@@ -83,6 +83,38 @@ HWINI1:
 	JSR	WAITRDY
 	LDA	#$FF
 	STA	$FE80
+	;
+	;	Now check for a bootable disk based OS
+	;	We expect a magic constant in the boot sector (LBA 2)
+	;	and if present that blocks 2+ contain the bootable OS image
+	;
+	;	This fits the PC partitioning scheme used by Fuzix.
+	;
+	LDX	#$0
+	LDD	#2
+	LBSR	RAWRD
+	LDX	$0
+	CMPX	#$6809
+	BNE	NOTBOOTABLE
+	;
+	;	At this point we can stop caring about the CUBIX environment
+	;	for the most part. Load most of memory from the first disk
+	;	blocks
+	;
+	LDS	#BOOTSTRAP	; stack out of the way
+	LDD	#3
+	LDX	#$0200	; load contiguous
+BOOTLD:
+	PSHS	D,X
+	BSR	RAWRD
+	PULS	D,X
+	ADDD	#1
+	LEAX	$200,X
+	CMPX	#$F800
+	BNE	BOOTLD
+	JMP	$0002	; past signature
+
+NOTBOOTABLE:
 	RTS
 WRSER1:
 	LDX	#$FEC0
@@ -134,6 +166,7 @@ DHOME:
 DRDSEC:
 	BSR	SETLBA
 	BNE	DSKERR
+RAWRDS:
 	LDA	#$20
 	BSR	SENDCMD
 	BNE	DSKERR
@@ -148,6 +181,14 @@ RDLP:
 	CLRA
 DSKERR:
 	RTS
+
+;
+;	Support method for the boot environment. Used so you can also boot
+;	an OS from disk instead. Read block D into memory at X. Destroys Y
+;
+RAWRD:
+	BSR RAWLBA
+	BRA RAWRDS
 
 DWRSEC:
 	BSR	SETLBA
@@ -187,6 +228,7 @@ SETLBA:
 	ADCA	#$00
 	; Now add 4MB per drive code (32 x 256 sectors)
 	ADDA	DRIVE,U
+RAWLBA:	; entry point to load block D (low 64K blocks only).
 	CLR	$FE15
 	STA	$FE14
 	STB	$FE13
@@ -277,6 +319,7 @@ RITAB:
 
 RISIZ	EQU	*-RITAB
 
+
 PREBOOT:
 	LDA	#$80
 	STA	$FE80		; Debug lights
@@ -308,8 +351,15 @@ PREBOOT:
 COPYRAM:
 	LDD	,X++
 	STD	,Y++
-	CMPX	#$0
+	CMPX	#$FE00
 	BNE	COPYRAM
+	LDX	#$FF00
+	LDY	#$BF00
+COPYRAM2:
+	LDD	,X++
+	STD	,Y++
+	CMPX	#$0
+	BNE	COPYRAM2
 	LDA	#$83
 	STA	$FE80		; Debug lights
 
