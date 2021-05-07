@@ -5,7 +5,7 @@ SEARCH_DIR(.)
 MEMORY
 {
   rom (rx) : ORIGIN = 0x0, LENGTH = 0x80000
-  ram (rwx) : ORIGIN = 0x80000, LENGTH = 0x80000
+  ram (rwx) : ORIGIN = 0x80400, LENGTH = 0x7FC00
 }
 
 /*

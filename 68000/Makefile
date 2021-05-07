@@ -7,7 +7,7 @@ OBJCOPY = m68k-linux-gnu-objcopy
 CFLAGS = -Os -Wall -pedantic -fomit-frame-pointer -I.  -m68000
 
 rom: rom.o main.o ff.o platform-rc2014.o libgcc.o
-	$(LD) -M -T rom.ld rom.o main.o ff.o platform-rc2014.o libgcc.o -o rom.elf >rom.map
+	$(LD) -M -T rom.ld -q rom.o main.o ff.o platform-rc2014.o libgcc.o -o rom.elf >rom.map
 	$(OBJCOPY) rom.elf -O binary rom.bin
 	dd if=rom.bin of=rom bs=512K count=1 conv=sync
 

@@ -56,40 +56,126 @@
 
 	;Reserved and user vectors beyond here so we don't need them
 
+vec_bus 	equ	$80008
+vec_addr 	equ	$8000C
+vec_ill		equ	$80010
+vec_div		equ	$80014
+vec_chk		equ	$80018
+vec_v		equ	$8001C
+vec_priv	equ	$80020
+vec_trace	equ	$80024
+vec_A		equ	$80028
+vec_F		equ	$8002C
+vec_irq		equ	$80068
+vec_trap0	equ	$80080
+vec_trap1	equ	$80084
+vec_trap2	equ	$80088
+vec_trap3	equ	$8008C
+vec_trap4	equ	$80090
+vec_trap5	equ	$80094
+vec_trap6	equ	$80098
+vec_trap7	equ	$8009C
+vec_trap8	equ	$800A0
+vec_trap9	equ	$800A4
+vec_trap10	equ	$800A8
+vec_trap11	equ	$800AC
+vec_trap12	equ	$800B0
+vec_trap13	equ	$800B4
+vec_trap14	equ	$800B8
+vec_trap15	equ	$800BC
+
+
 trapbus:
+	move.l (vec_bus),-(sp)
+	rts
 trapaddr:
+	move.l (vec_addr),-(sp)
+	rts
 trapill:
+	move.l (vec_ill),-(sp)
+	rts
 trapdiv:
+	move.l (vec_div),-(sp)
+	rts
 trapchk:
+	move.l (vec_chk),-(sp)
+	rts
 trapv:
+	move.l (vec_v),-(sp)
+	rts
 trappriv:
+	move.l (vec_priv),-(sp)
+	rts
 traptrace:
+	move.l (vec_trace),-(sp)
+	rts
 traplineA:
+	move.l (vec_A),-(sp)
+	rts
 traplineF:
+	move.l (vec_F),-(sp)
+	rts
+auto2:
+	move.l (vec_irq),-(sp)
+	rts
+trap0:
+	move.l (vec_trap0),-(sp)
+	rts
+trap1:
+	move.l (vec_trap1),-(sp)
+	rts
+trap2:
+	move.l (vec_trap2),-(sp)
+	rts
+trap3:
+	move.l (vec_trap3),-(sp)
+	rts
+trap4:
+	move.l (vec_trap4),-(sp)
+	rts
+trap5:
+	move.l (vec_trap5),-(sp)
+	rts
+trap6:
+	move.l (vec_trap6),-(sp)
+	rts
+trap7:
+	move.l (vec_trap7),-(sp)
+	rts
+trap8:
+	move.l (vec_trap8),-(sp)
+	rts
+trap9:
+	move.l (vec_trap9),-(sp)
+	rts
+trap10:
+	move.l (vec_trap10),-(sp)
+	rts
+trap11:
+	move.l (vec_trap11),-(sp)
+	rts
+trap12:
+	move.l (vec_trap12),-(sp)
+	rts
+trap13:
+	move.l (vec_trap13),-(sp)
+	rts
+trap14:
+	move.l (vec_trap14),-(sp)
+	rts
+trap15:
+	move.l (vec_trap15),-(sp)
+	rts
+
+
+
 spurious:
 auto1:
-auto2:
 auto3:
 auto4:
 auto5:
 auto6:
 auto7:
-trap0:
-trap1:
-trap2:
-trap3:
-trap4:
-trap5:
-trap6:
-trap7:
-trap8:
-trap9:
-trap10:
-trap11:
-trap12:
-trap13:
-trap14:
-trap15:
 unused:
 uninit:
 	rte
@@ -100,7 +186,8 @@ start:
 	move.b #$AA,$80(a6)		; Lights
 	; Now program the 16x50
 	move.b #$80,$C3(a6)		; DLAB
-	move.w #$0300,$C0(a6)		; $0003 = 38400 (little endian)
+	move.b #$01,$C0(a6)		; $0001 = 115200 (little endian)
+	move.b #$00,$C1(a6)
 	move.b #$03,$C3(a6)		; DLAB off, 8N1, RTS on
 	move.b #$02,$C4(a6)
 	move.b #$87,$C2(a6)

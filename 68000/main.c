@@ -284,21 +284,6 @@ DSTATUS disk_initialize(BYTE drive)
 
 //PARTITION VolToPart[FF_VOLUMES];
 
-static void disk_boot(uint8_t drive)
-{
-    if (disk_read(drive, diskbuf, 0, 1) != RES_OK)
-        return;
-    if (memcmp(diskbuf, "RETRODOSBOOT64", 14))
-        return;
-    /* Bootable media: most syscalls are not usable at this point but
-       some like the console are and are handy */
-    ((loader_t)(diskbuf + 14))(drive, mem_sys.mem_base,
-                                    mem_sys.mem_size, syscall);
-    /* If we get here the loader returned: we don't allow an exit but
-       we do allow for it to return - eg to offer a boot menu including
-       DOS from ROM */
-}
-
 static void disk_init(void)
 {
     static char path[3]= "0:";
@@ -306,11 +291,6 @@ static void disk_init(void)
     uint8_t fv = 255;
     FRESULT r;
     disk_probe();
-    for (i = 0; i < MAXDISK; i++) {
-        if (disks[i] && (disks[i]->flags & DISK_BOOTABLE)) {
-            disk_boot(i);
-        }
-    }
     for (i = 0; i < MAXDISK; i++) {
         if (disks[i] && (disks[i]->flags & DISK_PRESENT)) {
             path[0] = '0' + i;
@@ -329,6 +309,24 @@ static void disk_init(void)
     path[0] = '0' + fv;
     f_chdrive(path);
     curvol = fv;
+}
+
+/*
+ *	Wrappers for syscalls to do raw disk
+ */
+
+static DRESULT f_disk_read(BYTE drive, BYTE *buff, LBA_t sector, UINT count)
+{
+    if (disks[drive] && disks[drive]->flags & DISK_PRESENT)
+        return disk_read(drive, buff, sector, count);
+    return FR_NOT_ENABLED;
+}
+
+static DRESULT f_disk_write(BYTE drive, const BYTE *buff, LBA_t sector, UINT count)
+{
+    if (disks[drive] && disks[drive]->flags & DISK_PRESENT)
+        return disk_write(drive, buff, sector, count);
+    return FR_NOT_ENABLED;
 }
 
 /*
@@ -392,6 +390,9 @@ uint32_t syscall(uint32_t *argp)
     static char buf[3] = "0:";
     FRESULT r;
     UINT n;
+
+    puts("syscall ");
+    putunum(call);
 
     switch(call) {
         case 0x00:
@@ -493,6 +494,18 @@ uint32_t syscall(uint32_t *argp)
         case 0xF0:
             return -f_mkfs((const TCHAR *)argp[0], (const MKFS_PARM *)argp[1],
                 (void *)argp[2], argp[3]);
+        case 0xF1:
+            puts("diskread disk ");
+            putunum(argp[0]);
+            puts(" : ptr ");
+            puthexlong(argp[1]);
+            puts(" : lba ");
+            puthexlong(argp[2]);
+            puts(" : count ");
+            puthexlong(argp[3]);
+            return -f_disk_read(argp[0], (BYTE *)argp[1], (LBA_t)argp[2], argp[3]);
+        case 0xF2:
+            return -f_disk_write(argp[0], (const BYTE *)argp[1], (LBA_t)argp[2], argp[3]);
     }
     return -FR_INVALID_PARAMETER;
 }
@@ -601,6 +614,16 @@ static char *getarg(void)
     return n;
 }
 
+static void putfname(const char *p)
+{
+    uint8_t i = 0;
+    while(*p && i++ < 12) {
+        putchar(*p++);
+    }
+    while(i++ < 12)
+        putchar(' ');
+}
+
 /* Could do with a long form and patterns */
 static void command_dir(char *tail)
 {
@@ -635,7 +658,7 @@ static void command_dir(char *tail)
 
     if (report(f_opendir(&dp, tail)) == FR_OK) {
         while(f_readdir(&dp, &fno) == FR_OK && fno.fname[0]) {
-            puts(fno.fname);
+            putfname(fno.fname);
             if (++row == 8) {
                 row = 0;
                 nl();
@@ -740,12 +763,43 @@ static void command_path(void)
     *pathp = NULL;
 }
 
+/* FIXME: allow "BOOT 2:" perhaps ? */
+static void command_boot(void)
+{
+    if (f_disk_read(curvol, diskbuf, 0, 1) != RES_OK) {
+        puts("Not a valid disk.\r\n");
+        return;
+    }
+    if (memcmp(diskbuf, "RETRODOSBOOT68", 14)){
+        puts("Not bootable.\r\n"); 
+        return;
+    }
+    puts("Booting from disk.\r\n");
+    /* Bootable media: most syscalls are not usable at this point but
+       some like the console are and are handy as are the low level
+       disk ones. */
+    ((loader_t)(diskbuf + 14))(curvol, mem_sys.mem_base,
+                                    mem_sys.mem_size, syscall);
+    /* If we get here the loader returned: we don't allow an exit but
+       we do allow for it to return - eg to offer a boot menu including
+       DOS from ROM */
+}
+
+
         
 static int internal_command(char *cmd, char *tail)
 {
     argp = tail;
+    if (strcmp(cmd, "BOOT") == 0) {
+        command_boot();
+        return 1;
+    }
     if (strcmp(cmd, "CD") == 0) {
         report(f_chdir(tail));
+        return 1;
+    }
+    if (strcmp(cmd, "COPY") == 0) {
+        command_copy();
         return 1;
     }
     if (strcmp(cmd, "DIR") == 0) {
@@ -760,16 +814,12 @@ static int internal_command(char *cmd, char *tail)
         report(f_mkdir(tail));
         return 1;
     }
-    if (strcmp(cmd, "TYPE") == 0) {
-        command_type();
-        return 1;
-    }
-    if (strcmp(cmd, "COPY") == 0) {
-        command_copy();
-        return 1;
-    }
     if (strcmp(cmd, "PATH") == 0) {
         command_path();
+        return 1;
+    }
+    if (strcmp(cmd, "TYPE") == 0) {
+        command_type();
         return 1;
     }
     return 0;
@@ -842,7 +892,7 @@ void rommain(void)
 {
     char cmd[256];
     coninit();
-    puts("\010Welcome to RetroDOS/68K v0.01\r\n(C) Copyright 2020 Alan Cox\r\n");
+    puts("\010Welcome to RetroDOS/68K v0.03\r\n(C) Copyright 2020 Alan Cox\r\n");
     puts("RetroDOS is free software under the terms of the GNU Public Licence version 2\r\n");
     puts("This software is provided with NO WARRANTY and should not be used in safety\r\n");
     puts("critical situations.\r\n\r\n");
