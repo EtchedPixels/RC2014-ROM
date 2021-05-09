@@ -1,9 +1,6 @@
 ;
 ;	CP/M 3 unbanked BIOS for RC2014 with new style ROM
 ;
-;	This uses Z80 instruction format but only 8080 instructions. That
-;	makes it much eaiser to maintain the shared code.
-;
 ;	ZMAC BIOS3.ASM
 ;	ZMAC SCB.ASM
 ;	LINK BIOS3[B]=BIOS3,SCB
