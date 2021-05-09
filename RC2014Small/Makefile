@@ -1,4 +1,4 @@
-rc2014.rom: rom.asm romfix
+rc2014.rom: rom.asm
 	zmac rom.asm
 	dd if=zout/rom.cim of=rom bs=8192 conv=sync
 	dd if=zout/rom.cim of=rom8 bs=8192 conv=sync count=1
