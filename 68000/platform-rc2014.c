@@ -116,7 +116,7 @@ static int wait_drq(void)
     return -1;
 }
 
-static int wait_drdy(void)
+static int wait_drdy(uint8_t probe)
 {
     long ct = 100000;
     uint8_t r;
@@ -125,19 +125,21 @@ static int wait_drdy(void)
         if (r & IDE_STATUS_BUSY)
             continue;
         if (r & IDE_STATUS_ERROR) {
-            dump_cf("Error (DRDY)");
+            if (!probe)
+                dump_cf("Error (DRDY)");
             return -1;
         }
         if (r & IDE_STATUS_READY)
             return 0;
     }
-    dump_cf("Timeout (DRDY)");
+    if (!probe)
+        dump_cf("Timeout (DRDY)");
     return -1;
 }
 
 static int send_command(uint8_t cmd)
 {
-    if (wait_drdy())
+    if (wait_drdy(0))
         return -1;
     io[IDE_REG_COMMAND] = cmd;
     /* and we should be slow enough we can't read too early */
@@ -146,11 +148,8 @@ static int send_command(uint8_t cmd)
 
 static void set_lba(uint32_t lba, uint8_t sel)
 {
-    puts("SETLBA SEL ");
-    puthexbyte(sel);
-    nl();
     io[IDE_REG_LBA(3)] = ((lba >> 24) & 0x0F) | sel;
-    wait_drdy();
+    wait_drdy(0);
     io[IDE_REG_LBA(0)] = lba;
     io[IDE_REG_LBA(1)] = lba >> 8;
     io[IDE_REG_LBA(2)] = lba >> 16;
@@ -191,9 +190,9 @@ static DRESULT cf_read(struct disk *d, uint8_t *buf, LBA_t lba, UINT count)
 {
     uint16_t i;
     while(count--) {
-        puts("READ LBA ");
-        puthexlong(lba);
-        nl();
+//        puts("READ LBA ");
+//        puthexlong(lba);
+//        nl();
         set_lba(lba, d->unit);
         if (send_command(IDE_CMD_READ_SECTOR))
             return RES_ERROR;
@@ -201,14 +200,14 @@ static DRESULT cf_read(struct disk *d, uint8_t *buf, LBA_t lba, UINT count)
             return RES_ERROR;
         for (i = 0; i < 512; i++) {
             *buf = io[IDE_REG_DATA];
-            puthexbyte(*buf);
-            putchar(' ');
-            if ((i & 31) == 31)
-                nl();
+//            puthexbyte(*buf);
+//            putchar(' ');
+//            if ((i & 31) == 31)
+//                nl();
             buf++;
         }
         lba++;
-        puts("OK\r\n");
+//        puts("OK\r\n");
     }
     return RES_OK;
 }
@@ -224,7 +223,7 @@ static DRESULT cf_write(struct disk *d, const uint8_t *buf, LBA_t lba, UINT coun
             return RES_ERROR;
         for (i = 0; i < 512; i++)
             io[IDE_REG_DATA] = *buf++;
-        if (wait_drdy())
+        if (wait_drdy(0))
             return RES_ERROR;
         lba++;
     }
@@ -237,10 +236,10 @@ static void cf_disk_probe(struct disk *d)
     char *bp = buf;
     uint16_t i;
 
-    if(wait_drdy())
+    if(wait_drdy(1))
         goto fail;
     io[IDE_REG_DEVHEAD] = d->unit;
-    if (wait_drdy())
+    if (wait_drdy(1))
         goto fail;
     io[IDE_REG_FEATURES] = 0x01;
     /* FIXME: we need to make send_command distinguish between failure
@@ -376,7 +375,7 @@ static int ppide_wait_drq(void)
     return -1;
 }
 
-static int ppide_wait_drdy(void)
+static int ppide_wait_drdy(uint8_t probe)
 {
     long ct = 100000;
     uint8_t r;
@@ -385,19 +384,21 @@ static int ppide_wait_drdy(void)
         if (r & IDE_STATUS_BUSY)
             continue;
         if (r & IDE_STATUS_ERROR) {
-            dump_ppide("Error (DRDY)");
+            if (!probe)
+                dump_ppide("Error (DRDY)");
             return -1;
         }
         if (r & IDE_STATUS_READY)
             return 0;
     }
-    dump_ppide("Timeout (DRDY)");
+    if (!probe)
+        dump_ppide("Timeout (DRDY)");
     return -1;
 }
 
 static int ppide_send_command(uint8_t cmd)
 {
-    if (ppide_wait_drdy())
+    if (ppide_wait_drdy(0))
         return -1;
     ppide_writeb(PPIDE_REG_COMMAND, cmd);
     /* and we should be slow enough we can't read too early */
@@ -406,11 +407,8 @@ static int ppide_send_command(uint8_t cmd)
 
 static void ppide_set_lba(uint32_t lba, uint8_t sel)
 {
-    puts("SETLBA SEL ");
-    puthexbyte(sel);
-    nl();
     ppide_writeb(PPIDE_REG_LBA(3), ((lba >> 24) & 0x0F) | sel);
-    ppide_wait_drdy();
+    ppide_wait_drdy(0);
     ppide_writeb(PPIDE_REG_LBA(0), lba);
     ppide_writeb(PPIDE_REG_LBA(1), lba >> 8);
     ppide_writeb(PPIDE_REG_LBA(2), lba >> 16);
@@ -445,9 +443,9 @@ static DRESULT ppide_ioctl(struct disk *d, BYTE cmd, void *buf)
 static DRESULT ppide_read(struct disk *d, uint8_t *buf, LBA_t lba, UINT count)
 {
     while(count--) {
-        puts("READ LBA ");
-        puthexlong(lba);
-        nl();
+//        puts("READ LBA ");
+//        puthexlong(lba);
+//        nl();
         ppide_set_lba(lba, d->unit);
         if (ppide_send_command(IDE_CMD_READ_SECTOR))
             return RES_ERROR;
@@ -456,7 +454,7 @@ static DRESULT ppide_read(struct disk *d, uint8_t *buf, LBA_t lba, UINT count)
         ppide_read_data(buf);
         lba++;
         buf += 512;
-        puts("OK\r\n");
+//        puts("OK\r\n");
     }
     return RES_OK;
 }
@@ -470,7 +468,7 @@ static DRESULT ppide_write(struct disk *d, const uint8_t *buf, LBA_t lba, UINT c
         if (ppide_wait_drq())
             return RES_ERROR;
         ppide_write_data(buf);
-        if (ppide_wait_drdy())
+        if (ppide_wait_drdy(0))
             return RES_ERROR;
         lba++;
         buf += 512;
@@ -485,10 +483,10 @@ static unsigned int ppide_disk_probe(struct disk *d, const char *x)
     uint16_t i;
 
     puts(x);
-    if(ppide_wait_drdy())
+    if(ppide_wait_drdy(1))
         goto fail;
     ppide_writeb(PPIDE_REG_DEVHEAD, d->unit);
-    if (ppide_wait_drdy())
+    if (ppide_wait_drdy(1))
         goto fail;
     if (ppide_send_command(IDE_CMD_IDENTIFY))
         goto fail;

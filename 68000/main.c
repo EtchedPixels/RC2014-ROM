@@ -391,8 +391,8 @@ uint32_t syscall(uint32_t *argp)
     FRESULT r;
     UINT n;
 
-    puts("syscall ");
-    putunum(call);
+//    puts("syscall ");
+//    putunum(call);
 
     switch(call) {
         case 0x00:
@@ -495,14 +495,6 @@ uint32_t syscall(uint32_t *argp)
             return -f_mkfs((const TCHAR *)argp[0], (const MKFS_PARM *)argp[1],
                 (void *)argp[2], argp[3]);
         case 0xF1:
-            puts("diskread disk ");
-            putunum(argp[0]);
-            puts(" : ptr ");
-            puthexlong(argp[1]);
-            puts(" : lba ");
-            puthexlong(argp[2]);
-            puts(" : count ");
-            puthexlong(argp[3]);
             return -f_disk_read(argp[0], (BYTE *)argp[1], (LBA_t)argp[2], argp[3]);
         case 0xF2:
             return -f_disk_write(argp[0], (const BYTE *)argp[1], (LBA_t)argp[2], argp[3]);
