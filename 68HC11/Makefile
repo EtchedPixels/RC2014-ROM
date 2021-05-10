@@ -1,4 +1,4 @@
-all: rom rom512 romsd loadsd
+all: rom rom512 romsd romsd512 loadsd
 
 rom: rom.obj
 	dd if=rom.obj bs=16384 skip=2 | dd of=rom bs=32768 count=1 conv=sync
@@ -8,6 +8,9 @@ romsd: romsd.obj
 
 rom512: rom.obj
 	dd if=rom.obj bs=16384 skip=3 | dd of=rom512 bs=512k count=1 conv=sync
+
+romsd512: romsd.obj
+	dd if=romsd.obj bs=16384 skip=3 | dd of=romsd512 bs=512k count=1 conv=sync
 
 loadsd: loadsd.obj
 	dd if=loadsd.obj bs=384 count=1 of=loadsd
@@ -43,5 +46,6 @@ loader.obj: loader.s
 clean:
 	rm -f fixconf fixconf.obj fixconf.lst *~
 	rm -f rom rom512 rom.obj rom.lst romsd romsd.obj loadsd loadsd.obj *~
+	rm -f romsd512
 	rm -f rom11a rom11a.obj rom11a.lst *~
 	rm -f loader loader.obj loader.lst

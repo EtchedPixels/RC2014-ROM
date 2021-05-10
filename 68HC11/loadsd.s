@@ -40,6 +40,10 @@ GO:
 	LDD #1
 	STD LBAINC
 BYTEMODE:
+
+	LDAA #$23
+	STAA $FE7B		; RAM 3 in place of ROM
+
 	LDY #$0200
 	LDAA #$77		; $EE00 bytes ($0200-$EFFF)
 
