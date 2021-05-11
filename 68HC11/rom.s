@@ -2,6 +2,10 @@
 ;	68HC11 Boot ROM for 32K/32K or 512K cards. Not yet got any handling
 ;	for linear modes.
 ;
+
+TMSK2	EQU	$24
+
+
 	ORG $7F00
 IBUF:
 	RMB 64
@@ -27,11 +31,14 @@ START:
 	; has to be picked at power up.
 	LDAA #$FF
 	STAA $103D
+	LDX #$F000
+	LDAA #$01
+	STAA TMSK2,X		; Divide by 4 prescale
 	LDS #$F1FF		; Internal RAM for the moment
 	LDAA #$3F
-	STAA $F009
+	STAA $09,X
 	LDAA #$2A
-	STAA $F008
+	STAA $08,X
 	LDX #$FE00
 	LDAA #$AA
 	STAA $80,X

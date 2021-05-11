@@ -25,7 +25,7 @@ SPSR	EQU	$29
 SPDR	EQU	$2A
 PDDR	EQU	$08
 DDRD	EQU	$09
-
+TMSK2	EQU	$24
 ;
 ;	Link at the EEROM base for boot use, and set port E correctly so
 ;	that the Buffalo ROM in the CPU boots the EEROM.
@@ -42,6 +42,8 @@ START:
 	LDAA #$FF
 	STAA $103D
 	LDX #$F000		; Internal I/O
+	LDAA #$01
+	STAA TMSK2,X		; Divide by 4 prescale
 	LDS #$F1FF		; Internal RAM for the moment
 	LDAA #$AA
 	STAA $FE80
@@ -95,7 +97,7 @@ RAMOK:
 	;	Probe for an SD card and set it up as tightly as we can
 	;
 
-	LDAA #$53	; SPI on, master, mode 0, slow
+	LDAA #$52	; SPI on, master, mode 0, slow (125Khz)
 	STAA SPCR,X
 	LDAA #$20	; CS pin is an output
 	STAA DDRD,X
