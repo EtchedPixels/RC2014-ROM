@@ -10,7 +10,7 @@ rom.o: rom.s
 	as68 rom.s -o rom.o
 
 rom512: rom512.bin
-	dd if=rom512.bin bs=16384 count=1 | dd of=rom512 bs=524288 count=1 conv=sync
+	dd if=rom512.bin bs=16384 skip=3 count=1 | dd of=rom512 bs=524288 count=1 conv=sync
 
 rom512.bin: rom512.o
 	ld68 -b rom512.o -o rom512.bin
