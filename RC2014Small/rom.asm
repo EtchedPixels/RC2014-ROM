@@ -264,6 +264,7 @@ is_z80:
 		ld a,02h
 		out (0a0h),a
 		ld a,096h		; RTS low, 8N1, no ints
+		out (0a0h),a
 		ld a,'R'
 		out (0a1h),a		; Start printing early
 		ld hl, aciafunc
@@ -2246,8 +2247,6 @@ rdblock:	ld a,(disksec)
 
 rdread:		call rdblock
 		; This is horrible due to the full RAM switch
-		ld a,'R'
-		rst 8
 rdrloop:	ld a,01h
 		out (30h),a
 		call altgetfar
@@ -2259,14 +2258,10 @@ rdrloop:	ld a,01h
 		inc de
 		inc hl
 		djnz rdrloop
-		ld a,'r'
-		rst 8
 		xor a
 		ret
 
 rdwrite:	call rdblock
-		ld a,'W'
-		rst 8
 rdwloop:	ex de,hl
 		call getfar
 		ex de,hl
@@ -2278,8 +2273,6 @@ rdwloop:	ex de,hl
 		inc de
 		inc hl
 		djnz rdwloop
-		ld a,'w'
-		rst 8
 		xor a
 		ret
 
@@ -2288,26 +2281,16 @@ rdwloop:	ex de,hl
 
 setsec:
 		ld (disksec),bc
-		rst 20h
-	        defb 'SETSEC',0
 		ret
 home:
 		ld bc,0
-		rst 20h
-	        defb 'HOME',0
 settrk:
 		ld (disktrk),bc
-		rst 20h
-	        defb 'SETTRK',0
 		ret
 setdma:
 		ld (diskdma),bc
-		rst 20h
-	        defb 'SETDMA',0
 		ret
 seldsk:
-		rst 20h
-	        defb 'SELDSK',0
 		ld b,0		; So the caller knows if it worked
 		ld a,c
 		cp 12		; M:
@@ -2330,8 +2313,6 @@ chkramd:
 		jr seldsk_ok
 
 read:
-		rst 20h
-	        defb 'READ',0
 		ld a,(diskdev)
 ;		cp 2
 ;		jr c, floprd
@@ -2341,32 +2322,20 @@ read:
 		ld ix,(diskfunc)
 		cp 6
 		jr nc, failed
-		rst 20h
-		defb 'READCF',0
 		call ide_setlba		; sets LBA, drive and count 1
 		jr nz, failed
-		rst 20h
-		defb 'LBASET',0
 		ld de,0f20h		; READ
 		call ide_writeb
 		call ide_wait_drq
 		jr z, failed		; No DRQ in time
-		rst 20h
-		defb 'GOTDRQ',0
 		ld de,(diskdma)
 		call ide_readsec
-		rst 20h
-		defb 'READSEC OK',0
 		call ide_wait_ready
 		push af
-		rst 20h
-		defb 'READY AND DONE',0
 		pop af
 		pop ix
 		ld a,0
 		ret nz			; OK
-		rst 20h
-		defb 'ERROR',0
 		inc a
 		ret			; Error
 failed:
@@ -2375,8 +2344,6 @@ failed:
 		ret
 
 write:
-		rst 20h
-	        defb 'WRITE',0
 		ld a,(diskdev)
 ;		cp 2
 ;		jr c, flopwr
@@ -2402,15 +2369,11 @@ write:
 		ret
 
 sectran:
-		rst 20h
-	        defb 'SECTRAN',0
 		ld h,b
 		ld l,c
 		ret
 
 flush:
-		rst 20h
-	        defb 'FLUSH',0
 		ld a,(diskdev)
 		cp 2
 		jr c, noflush
@@ -2427,8 +2390,6 @@ flush:
 		; it. That usually just means the drive doesn't support it
 		pop ix
 noflush:
-		ld a,'F'
-		rst 8
 		xor a			; it worked fine
 		ret
 
@@ -2436,8 +2397,6 @@ multio:
 		ret
 
 move:
-		rst 20h
-	        defb 'MOVE',0
 		ex de,hl
 		ldir
 		ex de,hl
