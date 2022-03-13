@@ -40,6 +40,8 @@ GO:
 	LDD #1
 	STD LBAINC
 BYTEMODE:
+	LDAA #$50		; SPI on master, faster
+	STAA SPCR,X
 
 	LDAA #$23
 	STAA $FE7B		; RAM 3 in place of ROM
