@@ -1241,7 +1241,6 @@ kbdoutw1:
 
 tmsprobe:
 		; Check for a TMS9918A next
-
 		ld hl,tmsreset
 		call tmsconfig
 		ld hl,tmstext
@@ -1272,6 +1271,7 @@ tmshi:
 cleartms:
 		ld a,' '
 		out (98h),a
+		dec bc
 		ld a,b
 		or c
 		jr nz, cleartms
@@ -1298,7 +1298,7 @@ tmsfont:
 		ld bc,768
 tmsifont:
 		ld a,(hl)
-		neg		; inverse video font
+		cpl		; inverse video font
 		out (98h),a
 		dec bc
 		ld a,b
@@ -1759,7 +1759,7 @@ has_paging:
 		ld a,16
 		ld (twidth),a
 
-;		call tmsprobe
+		call tmsprobe
 		rst 20h
 		defb 'C2014 8K Boot ROM v0.03'
 		defb 13,10,13,10,0
