@@ -49,7 +49,7 @@ boot:
 	ldaa #$CF
 	staa $80,x
 
-	ldx #$7FFF
+	ldx #$BFFF
 	txs
 	ldx #hello
 	jsr outstring
@@ -123,10 +123,10 @@ bytes:
 
 	bsr waitready
 	ldaa @$0
-	cmpa #$63
+	cmpa #$68
 	bne badload
 	ldab @$1
-	cmpb #$03
+	cmpb #$00
 	bne badload
 	ldx #booted
 	bsr outstring
