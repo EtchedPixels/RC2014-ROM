@@ -8,10 +8,10 @@
 ;
 
 reset_wp	.equ	0xF000
-l1int_wp	.equ	0xF010
-l23int_wp	.equ	0xF020
-l4int_wp	.equ	0xF030
-nmi_wp		.equ	0xF040
+l1int_wp	.equ	0xF020
+l23int_wp	.equ	0xF040
+l4int_wp	.equ	0xF060
+nmi_wp		.equ	0xF080
 
 reset:
 	.word	reset_wp
