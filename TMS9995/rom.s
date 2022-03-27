@@ -63,17 +63,17 @@ reset_entry:
 	li	r0,0x8000
 	clr	*r0
  	mov	*r0,r1
-	jne	not_ram
+	jne	@not_ram
 	inc	*r0
 	mov	*r0,r1
-	jeq	not_ram
+	jeq	@not_ram
 
 	;
 	; RAM present to begin with - linear 32K/32K
 	;
 	li	r1,ram32
 	bl	@prints
-	jmp	ram_done
+	jmp	@ram_done
 
 	;
 	; We may have a 512K/512K card
@@ -86,21 +86,21 @@ not_ram:
 	li	r0,0x8000
 	clr	*r0
 	mov	*r0,r1
-	jne	fault_ram
+	jne	@fault_ram
 	inc	*r0
 	mov	*r0,r1
-	jeq	fault_ram
+	jeq	@fault_ram
 
 	li	r1,ram512
 	bl	@prints
 
-	jmp ram_done
+	jmp	@ram_done
 
 fault_ram:
 	li	r1, rambad
 	bl	@prints
 wait:
-	jmp	wait
+	jmp	@wait
 
 ;
 ;	We now have ROM low, RAM high regardless of memory card
@@ -115,33 +115,35 @@ monitor:
 	bl	@input
 	li	r2,buffer
 	movb	*r2+,r0
-	jeq	readmem_next
+	jeq	@readmem_next
 	bl	@spaces
 	ci	r0,'A' * 256
-	jeq	setaddr
+	jeq	@setaddr
+	ci	r0, 'B' * 256
+	ljeq	@bootstrap
 	ci	r0,'G' * 256
-	jeq	goto
+	jeq	@goto
 	ci	r0,'R' * 256
-	jeq	readmem
+	jeq	@readmem
 error:
 	li	r1,syntax
 	bl	@prints
-	jmp	monitor
+	jmp	@monitor
 
 setaddr:
 	bl	@hex4
-	jne	error
+	jne	@error
 	mov	r0,@addr
-	jmp	monitor
+	jmp	@monitor
 
 goto:
 	bl	@hex4
-	jne	error
+	jne	@error
 	b	r0
 
 readmem:
 	bl	@hex4
-	jne	error
+	jne	@error
 	mov	r0,@addr
 readmem_next:
 	mov	@addr,r0
@@ -154,16 +156,16 @@ rmlp:
 	movb	*r4+,r0
 	bl	@phex2
 	dec	r5
-	jne	rmlp
+	jne	@rmlp
 	mov	r4,@addr
 	li	r1,newline
 	bl	@prints
-	jmp	monitor
+	jmp	@monitor
 
 spaces:	movb	*r2+,r1
 	srl	r1,8
 	ci	r1,' '
-	jeq	spaces
+	jeq	@spaces
 	dec	r2
 	rt
 
@@ -179,7 +181,7 @@ io_loop:
 	movb	r3,@0xFE00(r2)
 	swpb	r2			; keep the other half clear
 	dect	r4
-	jne	io_loop
+	jne	@io_loop
 	rt
 
 
@@ -190,20 +192,20 @@ input:
 inputlp:
 	bl	@read
 	ci	r0,13 * 256
-	jeq	input_nl
+	jeq	@input_nl
 	ci	r0,8 * 256 
-	jeq	input_bs
+	jeq	@input_bs
 	ci	r0,127 * 256
-	jeq	input_bs
-	jgt	inputlp
+	jeq	@input_bs
+	jgt	@inputlp
 	ci	r0,32 * 256
-	jlt	inputlp
+	jlt	@inputlp
 	ci	r5,0
-	jeq	inputlp
+	jeq	@inputlp
 	movb	r0,*r4+
 	bl	@putchar
 	dec	r5
-	jmp	inputlp
+	jmp	@inputlp
 input_nl:
 	clr	r0
 	movb	r0,*r4
@@ -213,23 +215,23 @@ input_nl:
 	rt
 input_bs:
 	ci	r5,63
-	jeq	inputlp
+	jeq	@inputlp
 	li	r1, bsout
 	bl	@prints
 	inc	r5
-	jmp	inputlp
+	jmp	@inputlp
 
 
 hexdigit:
 	srl	r0,8
 	ai	r0, -'0'
 	ci	r0, 9
-	jle	hexgood
+	jle	@hexgood
 	ci	r0, 7
-	jlt	badhex
+	jlt	@badhex
 	ai	r0, -7
 	ci	r0, 15
-	jle	hexgood
+	jle	@hexgood
 badhex:
 	li	r1,1
 	rt
@@ -241,12 +243,12 @@ hex2:
 	mov	r11,r10
 	movb	*r2+,r0
 	bl	@hexdigit
-	jne	badhexr
+	jne	@badhexr
 	mov	r0,r3
 	sla	r3,4
 	movb	*r2+,r0
 	bl	@hexdigit
-	jne	badhexr
+	jne	@badhexr
 	a	r3,r0
 	mov	r10,r11
 	li	r1,0
@@ -260,22 +262,22 @@ hex4:
 	mov	r11,r10
 	movb	*r2+,r0
 	bl	@hexdigit
-	jne	badhexr
+	jne	@badhexr
 	mov	r0,r3
 	sla	r3,4
 	movb	*r2+,r0
 	bl	@hexdigit
-	jne	badhexr
+	jne	@badhexr
 	a	r0,r3
 	swpb	r3		; fastest shift by 8
 	movb	*r2+,r0
 	bl	@hexdigit
-	jne	badhexr
+	jne	@badhexr
 	sla	r0,4
 	a	r0,r3
 	movb	*r2+,r0
 	bl	@hexdigit
-	jne	badhexr
+	jne	@badhexr
 	a	r3,r0
 	mov	r10,r11
 	li	r1,0
@@ -311,11 +313,71 @@ phex2:
 	mov	r10,r11
 	rt
 
-	
-	
-	
+bootstrap:
+	li	r0,0x01EF		; 1 and set features
+	movb	r0,@0xFE11
+	swpb	r0
+	movb	r0,@0xFE17
+	bl	@waitready
+	li	r0,0xAA55
+	movb	r0,@0xFE13
+	cb	r0,@0xFE13
+	jne	@no_media
+	swpb	r0
+	movb	r0,@0xFE13
+	cb	r0,@0xFE13
+	jne	@no_media
+	li	r0,0x0100
+	movb	r0,@0xFE13
+	clr	@0xFE14
+	li	r0,0x0120		; 1 sector and read
+	movb	r0,@0xFE12
+	swpb	r0
+	movb	r0,@0xFE17
+	bl	@waitdrq
+	li	r0,0xFC00
+	li	r1, 256
+bootin:
+	movb	@0xFE10,r2
+	swpb	r2
+	movb	@0xFE10,r2
+	swpb	r2
+	mov	r2,*r0+
+	dec	r1
+	jne	@bootin
+	mov	@0xFC00,r0
+	ci	r0,0x9599
+	jne	@badboot
+	b	@0xFC02
+badboot:
+	li	r1,wrongboot
+	bl	@prints
+	b	@monitor
+no_media:
+	li	r1,nomedia
+	bl	@prints
+	b	@monitor
 
-	
+waitready:
+	movb	@0xFE17,r0
+	andi	r0,0x4000
+	jeq	@waitready
+	rt
+
+waitdrq:
+	movb	@0xFE17,r0
+	andi	r0,0x0900
+	jeq	@waitdrq
+	mov	r0,r1
+	andi	r1,0x0100
+	jne	@diskerr
+	rt
+diskerr:
+	bl	@phex2
+	li	r1,diskerror
+	bl	@prints
+	b	@monitor
+
 ;
 ;	16x50 UART drivers (used for now)
 ;
@@ -323,25 +385,25 @@ phex2:
 putchar:
 	movb	@0xFEC5,r1		; bit 5 is ready
 	andi	r1,0x2000
-	jeq	putchar
+	jeq	@putchar
 	movb	r0,@0xFEC0
 	rt
 
 prints:
 	movb	@0xFEC5,r0		; bit 5 is ready
 	andi	r0,0x2000
-	jeq	prints
+	jeq	@prints
 	movb	*r1+,r0
-	jeq	print_done
+	jeq	@print_done
 	movb	r0,@0xFEC0
-	jmp	prints
+	jmp	@prints
 print_done:
 	rt
 
 read:
 	movb	@0xFEC5,r0
 	andi	r0,0x0100
-	jeq	read
+	jeq	@read
 	clr	r0
 	movb	@0xFEC0,r0
 	rt
@@ -370,15 +432,15 @@ dr9902:
 prints_9902:
 	; Assumes R12 is set up and SB0 16 was done at init
 	tb	22
-	jne	prints_9902
+	jne	@prints_9902
 	movb	*r1,r0
-	jeq	print_done
+	jeq	@print_done
 	ldcr	*r1+,8
-	jmp	prints_9902
+	jmp	@prints_9902
 
 read_9902:
 	tb	21
-	jne	read_9902
+	jne	@read_9902
 	stcr	r0,8
 	sbz	18
 	rt
@@ -390,13 +452,13 @@ err:
 	b 	@wait
 l23int_entry:
 	li	r0,0x02
-	jmp	err
+	jmp	@err
 l4int_entry:
 	li	r0,0x04
-	jmp	err
+	jmp	@err
 nmi_entry:
 	li	r0,0xF0
-	jmp	err
+	jmp	@err
 
 io_setup:
 	; Debug
@@ -415,14 +477,14 @@ mmu_setup:
 	.byte	0x80, 0x01		; Debug
 	.byte	0x78, 0x00		; ROM 0 low
 	.byte	0x79, 0x01		; ROM 1
-	.byte	0x7A, 0x20		; RAM 0
-	.byte	0x7B, 0x21		; RAM 1
+	.byte	0x7A, 0x22		; RAM 2
+	.byte	0x7B, 0x23		; RAM 3
 	.byte	0x7C, 0x01		; Enable
 	.byte	0x80, 0x03
 mmu_end:
 
 hello:
-	.ascii	"C2014 Boot ROM for TMS9995 v0.01"
+	.ascii	"C2014 Boot ROM for TMS9995 v0.02"
 	.byte	13,10
 	.byte	13,10
 	.ascii	'RAM check: '
@@ -443,12 +505,22 @@ prompt:
 	.ascii	'* '
 	.byte	0
 syntax:
-	.ascii '?'
+	.ascii	'?'
+	.byte	13,10,0
+wrongboot:
+	.ascii	'Not bootable'
+	.byte	13,10,0
+nomedia:
+	.ascii	'No media'
+	.byte	13,10,0
+diskerror:
+	.ascii	' - disk error'
 	.byte	13,10,0
 
 	.even
 hextab:
 	.ascii	"0123456789ABCDEF"
+	.even
 
 	.bss
 
