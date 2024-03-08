@@ -11,7 +11,7 @@ extern unsigned in(unsigned port);
 extern void putchar(unsigned char);
 extern int getchar(void);
 
-static char diskbuf[512];
+extern char diskbuf[512];
 static unsigned char ide_present;
 
 void puts(register const char *p)

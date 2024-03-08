@@ -7,6 +7,8 @@
 ;	16-31	-	working register bank
 ;
 ;
+	.export _diskbuf
+
 	.code
 
 vectors:
@@ -44,9 +46,14 @@ start:
 	lde	@rr8,r10	; Set C space to ROM with high RAM
 	or	2,#0x40		; I/O disable
 
-	ld	245,#0x0D
-	ld	244,#1		; 19200 baud
-	ld	241,#3
+	; This assumes a 7.3723MHz clock. We can go up to 16MHz in theory
+	; but we need a sane clock for the internal uart to work
+	; We need to run t0 to generate 16x baud rate
+	; bitrate = clock / (2 x 4 x t0prescaler x t0counter x 16)
+	; with the 14.7 Mhz clock it all still works but you get 38400
+	ld	245,#0x0D	; prescale divide by 3
+	ld	244,#1		; 19200 baud (div by 1)
+	ld	241,#3		; internal timer, enable t0
 
 	ld	251,#0x08	; Serial RX interrupts only
 	ei
@@ -97,6 +104,8 @@ irq2:
 	iret
 irq3:
 	; RX
+	; Should tm p3,1 jr z, framing error
+	; but for now we will just assume all is good
 	ld	15,240	; Save the last RX byte for the main code to spot
 	iret
 irq4:
@@ -147,3 +156,10 @@ _putchar:
 	call	__gargr1
 	ld	0xF0,r3		; this will tx and set the flag
 	jp	__cleanup1
+
+	.data
+;
+;	So we know this is at E000
+;
+_diskbuf:
+	.ds	512
