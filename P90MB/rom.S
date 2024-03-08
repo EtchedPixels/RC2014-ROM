@@ -24,6 +24,11 @@ start:
 
 
 go:	
+	move.w #$42,$1000(a0)		; 2 wait states
+	move.w #$10,$1002(a0)		; /32 on timer 0
+	move.w #$FFF3,$2052(a0)		; 57600 baud
+	move.b #$34,$2055(a0)		; Timer 2 is serial
+	move.b #$50,$2023(a0)		; Normal 8bit serial
 	;
 	;	Wipe memory and copy
 	;

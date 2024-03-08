@@ -68,8 +68,6 @@ void mem_probe(struct mem *mem)
  *	then abstracting into a struct disk and installable drivers
  */
 
-#define static /* BUG */
-
 #define IDE_REG_BASE		0x01200000
 #define IDE_REG_DATA		0
 #define IDE_REG_ERR		1
