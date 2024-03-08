@@ -175,9 +175,6 @@ badpage:
 
 waitdrq:
 	in 0x17		! Status
-	push psw
-	call phex
-	pop psw
 	ani 0x08	! DRQ
 	jz waitdrq
 	ret
