@@ -46,6 +46,9 @@ reset_entry:
 	li	r0, nmi_entry
 	mov	r0, @0xFFFE
 
+	li	r0,0xAA00
+	movb	r0,@0xFE80
+
 	li	r1, io_setup
 	;	Length in bytes of set up block
 	li	r4, io_end - io_setup
@@ -97,6 +100,8 @@ not_ram:
 	jmp	@ram_done
 
 fault_ram:
+	li	r0,0xA000
+	movb	r0,@0xFE80
 	li	r1, rambad
 	bl	@prints
 wait:
@@ -108,6 +113,8 @@ wait:
 ram_done:
 
 monitor:
+	li	r0,0x8000
+	movb	r0,@0xFE80
 	mov	@addr,r0
 	bl	@phex4
 	li	r1,prompt
