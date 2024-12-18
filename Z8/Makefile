@@ -9,7 +9,7 @@ test: test.s
 bootrom: bootrom.o bootstrap.o
 	ldz8 -b -C 0x0000 -D 0xE000 -o bootrom.bin -m bootrom.map \
 		bootrom.o bootstrap.o /opt/fcc/lib/z8/libz8.a
-	dd if=bootrom.bin of=bootrom bs=524288 count=1 conv=sync
+	dd if=bootrom.bin of=bootrom.512 bs=524288 count=1 conv=sync
 
 bootrom.o: bootrom.S
 	fcc -c -mz8 bootrom.S

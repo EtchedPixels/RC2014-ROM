@@ -2,17 +2,27 @@
  *	Boot environment for the Z8
  */
 
-typedef void (*boot_t)(void);
-
 #define NULL	0
 
 extern unsigned out(unsigned port, unsigned val);
 extern unsigned in(unsigned port);
 extern void putchar(unsigned char);
 extern int getchar(void);
+extern void jump_low(void);
 
 extern char diskbuf[512];
 static unsigned char ide_present;
+
+static void puthexc(unsigned char c)
+{
+	putchar("0123456789ABCDEF"[c & 0x0F]);
+}
+
+void puthex(unsigned char c)
+{
+	puthexc(c >> 4);
+	puthexc(c);
+}
 
 void puts(register const char *p)
 {
@@ -186,12 +196,14 @@ static void cmd_boot(char *p)
 {
 	register char *dptr;
 	register unsigned i;
+
 	if (ide_present == 0) {
 		puts("No CF card\r\n");
 		return;
 	}
 	out(0x16,0xE0);
 	puts("CF Boot: ");
+
 	if (ide_wait_nbusy() == -1) {
 		nl();
 		return;
@@ -205,8 +217,8 @@ static void cmd_boot(char *p)
 		nl();
 		return;
 	}
-	out(0x12, 1);
-	out(0x13, 1);
+	out(0x12, 1);		/* One sector */
+	out(0x13, 1);		/* LBA 1 */
 	out(0x14, 0);
 	out(0x15, 0);
 	out(0x17, 0x20);	/* Read */
@@ -217,26 +229,26 @@ static void cmd_boot(char *p)
 	}
 	
 	dptr  = diskbuf;
-	for(i = 0; i < 512; i++)
+	for(i = 0; i < 512; i++) {
 		*dptr++ = in(0x10);
-	if (*diskbuf != 'Z' || diskbuf[1] != 8) {
+		puthex(dptr[-1]);
+	}
+	if (*diskbuf != 'Z' || diskbuf[1] != '8') {
 		puts("not bootable\r\n");
 		return;
 	}
 	puts("OK\r\n");
-	/* We have the same C and E mapping so this is safe in split I/D */
-	((boot_t)(diskbuf + 2))();
-	/* Should not return */
+	jump_low();	/* Copy low and run it from address 12 */
 }
 
-struct cmd cmdtab[] = {
+const struct cmd cmdtab[] = {
 	{ "BOOT", cmd_boot },
 	{ NULL, NULL }
 };
 
 static void run_command(const char *cmd, char *tail)
 {
-	struct cmd *c = cmdtab;
+	const struct cmd *c = cmdtab;
 	while(c->name) {
 		if (strcmp(c->name, cmd) == 0) {
 			c->exec(tail);
@@ -252,7 +264,7 @@ void main(void)
 {
 	char *p;
 	register char *c;
-	puts("RCBUS Z8 Bootstrap\r\n\r\n");
+	puts("RCBUS Z8 Bootstrap v0.03\r\n\r\n");
 	/* Now see what sort of memory we have */
 	if (is_ram(0x8000))
 		ramtype = 0;
