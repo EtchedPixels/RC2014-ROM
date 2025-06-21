@@ -19,7 +19,7 @@ start:
 	jmp	intb
 
 go:
-	ld	p1,=0xFDFF	; stack
+	ld	p1,=0xFFFF	; stack
 	ld	p2,=0xFEC0
 
 	ld	a,=0x80		; DLAB
@@ -86,9 +86,9 @@ boot:	jsr	waitready
 	st	a,:tmp
 loop:
 	ld	a,0x10,p3
-	st	a,@1,p3
+	st	a,@1,p2
 	ld	a,0x10,p3
-	st	a,@1,p3
+	st	a,@1,p2
 	dld	a,:tmp
 	bnz	loop
 
@@ -108,6 +108,7 @@ outs:
 	ld	ea,4,p1		; return addr
 	ld	p3,ea
 	ld	p2,=0xFEC0
+	ld	a,@1,p3		; inc p3
 nextch:
 	ld	a,5,p2
 	and	a,=0x20
@@ -118,6 +119,7 @@ nextch:
 	bra	nextch
 end:
 	ld	ea,p3
+	sub	ea,=1		; adjust for +1 post ret
 	st	ea,4,p1
 	pop	p3
 	pop	p2
@@ -142,6 +144,7 @@ waitdrq:
 	ret
 fail:
 	jsr	outs
+	.byte	13,10,0
 	.ascii	"Disk Error"
 	.byte	13,10,0
 dead:	bra	dead
