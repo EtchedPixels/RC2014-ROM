@@ -19,11 +19,11 @@ loader:	; loaded at FC00 with stack at FDFF so eats into our top
 	ld	p3,=0xFE00
 	ld	p2,=0xFEC0
 	ld	a,=0x20
-	st	a,0x7C,p3	; Set low 16K to RAM 0 so we are now all RAM
+	st	a,0x78,p3	; Set low 16K to RAM 0 so we are now all RAM
 
 block:	ild	a,:sec
 	bp	next		; sectors 2 to 0x7F so 0x80 is done
-	jmp	0x0000
+	jmp	0x0001
 next:
 	jsr	sector
 nch:	ld	a,5,p2
@@ -51,9 +51,9 @@ sector:
 	st	a,:tmp
 loop:
 	ld	a,0x10,p3
-	st	a,@1,p3
+	st	a,@1,p2
 	ld	a,0x10,p3
-	st	a,@1,p3
+	st	a,@1,p2
 	dld	a,:tmp
 	bnz	loop
 
